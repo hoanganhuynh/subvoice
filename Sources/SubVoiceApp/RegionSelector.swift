@@ -24,6 +24,23 @@ final class RegionSelector {
         }
     }
 
+    /// Bơm mouseDown/Dragged/Up thật vào hàng đợi sự kiện của chính app, để đi
+    /// đúng đường dispatch như khi người dùng kéo chuột. Chỉ dùng cho bài test
+    /// hồi quy `Scripts/smoke-overlay.sh` — không có đường nào trong UI gọi tới.
+    func simulateDragForSmokeTest() {
+        guard let overlay = overlays.first else { return }
+        let num = overlay.windowNumber
+        func event(_ type: NSEvent.EventType, _ p: NSPoint) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: p, modifierFlags: [],
+                               timestamp: ProcessInfo.processInfo.systemUptime,
+                               windowNumber: num, context: nil,
+                               eventNumber: 0, clickCount: 1, pressure: 1)
+        }
+        if let e = event(.leftMouseDown, NSPoint(x: 100, y: 100)) { NSApp.postEvent(e, atStart: false) }
+        if let e = event(.leftMouseDragged, NSPoint(x: 500, y: 200)) { NSApp.postEvent(e, atStart: false) }
+        if let e = event(.leftMouseUp, NSPoint(x: 500, y: 200)) { NSApp.postEvent(e, atStart: false) }
+    }
+
     private func finish(globalRect: CGRect?, screen: NSScreen?) {
         overlays.forEach { $0.close() }
         overlays.removeAll()
@@ -73,6 +90,10 @@ private final class SelectionOverlay: NSWindow {
             defer: false
         )
         setFrame(screen.frame, display: false)
+        // NSWindow tạo bằng code mặc định isReleasedWhenClosed = true: close()
+        // sẽ tự release cửa sổ MỘT lần, rồi ARC release lần nữa khi mảng
+        // `overlays` bị xoá -> over-release -> crash trong CA transaction sau đó.
+        isReleasedWhenClosed = false
         level = .screenSaver
         backgroundColor = NSColor.black.withAlphaComponent(0.25)
         isOpaque = false
@@ -96,6 +117,7 @@ private final class SelectionOverlay: NSWindow {
         selectionView.onCancel = { [weak self] in self?.onCancel?() }
         contentView = selectionView
     }
+
 
     override var canBecomeKey: Bool { true }
 

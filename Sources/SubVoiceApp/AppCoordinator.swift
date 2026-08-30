@@ -71,10 +71,30 @@ final class AppCoordinator {
         ocr.warmUp()
         speech.warmUp()
 
+        if CommandLine.arguments.contains("--smoke-overlay") {
+            runOverlaySmokeTest()
+            return
+        }
+
         if !speech.hasVietnameseVoice {
             menuBar.setState(.warning("Thiếu giọng tiếng Việt — bấm để xem hướng dẫn"))
         } else if !PermissionHelper.hasScreenRecordingAccess {
             menuBar.setState(.warning("Cần quyền Screen Recording — bấm để mở cài đặt"))
+        }
+    }
+
+    /// Chạy trọn một chu trình chọn vùng rồi thoát, để `Scripts/smoke-overlay.sh`
+    /// chạy nó dưới NSZombie và bắt lại lỗi over-release cửa sổ overlay.
+    private func runOverlaySmokeTest() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            self?.reselectRegion()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                self?.regionSelector.simulateDragForSmokeTest()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    print("OVERLAY-SMOKE-OK")
+                    exit(0)
+                }
+            }
         }
     }
 
