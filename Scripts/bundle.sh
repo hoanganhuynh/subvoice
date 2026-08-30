@@ -25,11 +25,27 @@ mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
 cp "${BUILD_DIR}/SubVoiceApp" "${APP_DIR}/Contents/MacOS/SubVoiceApp"
 cp Resources/Info.plist "${APP_DIR}/Contents/Info.plist"
 
-IDENTITY="${SUBVOICE_SIGN_IDENTITY:--}"
+# Tự dò một chứng chỉ ổn định nếu chưa đặt biến môi trường. Chữ ký ad-hoc gắn
+# danh tính app vào cdhash của binary, mà cdhash đổi sau MỖI lần build -> quyền
+# Screen Recording đã cấp lập tức thành vô hiệu. Chứng chỉ Apple Development gắn
+# danh tính vào Team ID nên quyền giữ nguyên qua các lần build.
+IDENTITY="${SUBVOICE_SIGN_IDENTITY:-}"
+if [ -z "${IDENTITY}" ]; then
+    IDENTITY=$(security find-identity -v -p codesigning \
+        | grep -oE '"(Developer ID Application|Apple Development)[^"]*"' \
+        | head -1 | tr -d '"')
+fi
+if [ -z "${IDENTITY}" ]; then
+    IDENTITY="-"
+fi
+
 codesign --force --sign "${IDENTITY}" --timestamp=none "${APP_DIR}"
+
 if [ "${IDENTITY}" = "-" ]; then
-    echo "CẢNH BÁO: đang ký ad-hoc. macOS có thể hỏi lại quyền Screen Recording"
-    echo "sau mỗi lần build. Xem hướng dẫn ở đầu file này để tránh."
+    echo "CẢNH BÁO: ký ad-hoc vì không tìm thấy chứng chỉ nào."
+    echo "macOS sẽ hỏi lại quyền Screen Recording sau MỖI lần build."
+else
+    echo "Đã ký bằng: ${IDENTITY}"
 fi
 
 mkdir -p "${INSTALL_DIR}"

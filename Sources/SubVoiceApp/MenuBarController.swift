@@ -3,7 +3,7 @@ import ServiceManagement
 import SubVoiceCore
 
 @MainActor
-final class MenuBarController {
+final class MenuBarController: NSObject, NSMenuDelegate {
 
     enum State {
         case stopped
@@ -18,6 +18,9 @@ final class MenuBarController {
     var onVolumeChange: ((Float) -> Void)?
     var onWarningClicked: (() -> Void)?
     var onQuit: (() -> Void)?
+    /// Quyền hệ thống có thể đổi lúc app đang chạy, nên trạng thái phải được
+    /// tính lại mỗi lần mở menu thay vì chỉ tính một lần lúc khởi động.
+    var onMenuWillOpen: (() -> Void)?
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
@@ -31,8 +34,13 @@ final class MenuBarController {
 
     init(settings: Settings) {
         self.settings = settings
+        super.init()
         buildMenu()
         setState(.stopped)
+    }
+
+    nonisolated func menuWillOpen(_ menu: NSMenu) {
+        MainActor.assumeIsolated { onMenuWillOpen?() }
     }
 
     // MARK: - Trạng thái
@@ -140,6 +148,7 @@ final class MenuBarController {
         quit.target = self
         menu.addItem(quit)
 
+        menu.delegate = self
         statusItem.menu = menu
     }
 

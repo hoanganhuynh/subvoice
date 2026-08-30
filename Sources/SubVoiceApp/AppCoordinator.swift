@@ -56,6 +56,25 @@ final class AppCoordinator {
     private let measuringLatency = CommandLine.arguments.contains("--measure-latency")
 
     func start() {
+        if CommandLine.arguments.contains("--check-permission") {
+            // Ghi ra file thay vì stdout: cách đo ĐÚNG là khởi động app qua
+            // Finder (`open --args`), lúc đó không có stdout để đọc. Chạy binary
+            // thẳng từ Terminal sẽ cho kết quả SAI vì TCC quy trách nhiệm cho
+            // Terminal, và Terminal thường đã có sẵn quyền Screen Recording.
+            let report = """
+            screen-recording-granted: \(PermissionHelper.hasScreenRecordingAccess)
+            vietnamese-voice-found:   \(speech.hasVietnameseVoice)
+            bundle-id:                \(Bundle.main.bundleIdentifier ?? "khong co bundle")
+            """
+            print(report)
+            try? report.write(
+                toFile: "/tmp/subvoice-permission.txt",
+                atomically: true,
+                encoding: .utf8
+            )
+            exit(0)
+        }
+
         menuBar = MenuBarController(settings: settings)
         wireMenuBar()
         wirePipeline()
@@ -123,7 +142,22 @@ final class AppCoordinator {
                 PermissionHelper.openScreenRecordingSettings()
             }
         }
+        menuBar.onMenuWillOpen = { [weak self] in self?.refreshIdleState() }
         menuBar.onQuit = { NSApp.terminate(nil) }
+    }
+
+    /// Quyền Screen Recording chỉ có hiệu lực sau khi app khởi động lại, và
+    /// người dùng hầu như luôn cấp quyền lúc app đang chạy. Tính lại mỗi lần mở
+    /// menu để không hiện cảnh báo đã cũ.
+    private func refreshIdleState() {
+        guard !isRunning else { return }
+        if !speech.hasVietnameseVoice {
+            menuBar.setState(.warning("Thiếu giọng tiếng Việt — bấm để xem hướng dẫn"))
+        } else if !PermissionHelper.hasScreenRecordingAccess {
+            menuBar.setState(.warning("Cần quyền Screen Recording — bấm để mở cài đặt"))
+        } else {
+            menuBar.setState(.stopped)
+        }
     }
 
     private func wirePipeline() {
