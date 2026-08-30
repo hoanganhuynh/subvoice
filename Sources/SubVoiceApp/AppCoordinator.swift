@@ -7,12 +7,28 @@ import SubVoiceCore
 ///
 /// Tách hẳn ra khỏi `AppCoordinator` (vốn là `@MainActor`) thay vì để làm
 /// thuộc tính, để không thể vô tình đụng tới nó từ main thread.
+/// Kết quả xét một khung, kèm các số đo dùng để chỉnh ngưỡng.
+struct FrameDecision {
+    let verdict: FrameVerdict
+    /// Verdict có khác khung trước không — để chỉ log lúc đổi trạng thái.
+    let isTransition: Bool
+    let distance: Float
+    let brightness: Float
+}
+
 final class CaptureQueueState {
     private var detector = ChangeDetector()
     private var lastOCRSubmit = Date.distantPast
 
-    func evaluate(_ signature: BrightnessSignature) -> FrameVerdict {
-        detector.evaluate(signature)
+    func evaluate(_ signature: BrightnessSignature) -> FrameDecision {
+        let before = detector.previousVerdict
+        let verdict = detector.evaluate(signature)
+        return FrameDecision(
+            verdict: verdict,
+            isTransition: before != verdict,
+            distance: detector.lastDistance,
+            brightness: detector.lastTotalBrightness
+        )
     }
 
     /// Giới hạn tần suất OCR cứng. Trả về true và ghi nhận mốc nếu được phép chạy.
@@ -54,6 +70,7 @@ final class AppCoordinator {
 
     private var latencies: [Double] = []
     private let measuringLatency = CommandLine.arguments.contains("--measure-latency")
+    nonisolated(unsafe) private let tracing = CommandLine.arguments.contains("--trace")
 
     func start() {
         if CommandLine.arguments.contains("--check-permission") {
@@ -251,7 +268,26 @@ final class AppCoordinator {
         CVPixelBufferUnlockBaseAddress(frame, .readOnly)
         guard let signature else { return }
 
-        switch captureState.evaluate(signature) {
+        let decision = captureState.evaluate(signature)
+
+        if tracing {
+            switch decision.verdict {
+            case .changed:
+                NSLog("TRACE detector=changed dist=%.4f bright=%.4f",
+                      decision.distance, decision.brightness)
+            case .blank where decision.isTransition:
+                NSLog("TRACE detector=blank bright=%.4f (nguong blank=%.4f)",
+                      decision.brightness, DetectorTuning.blankFloor)
+            case .unchanged where decision.distance >= DetectorTuning.changeThreshold * 0.4:
+                // Suýt vượt ngưỡng. Nếu câu bị bỏ qua thì đây chính là chỗ mất.
+                NSLog("TRACE detector=unchanged SUYT-VUOT dist=%.4f (nguong=%.4f)",
+                      decision.distance, DetectorTuning.changeThreshold)
+            default:
+                break
+            }
+        }
+
+        switch decision.verdict {
         case .blank:
             // Vùng phụ đề trống -> xoá trạng thái lọc trùng, để câu lặp lại
             // ở cảnh sau vẫn được đọc.
@@ -272,8 +308,31 @@ final class AppCoordinator {
 
     private func handleText(_ text: String) {
         guard isRunning else { return }
-        guard case .speak(let sentence) = gate.admit(text) else { return }
-        guard let immediate = speechQueue.enqueue(sentence) else { return }
+
+        if tracing { NSLog("TRACE ocr=\"%@\"", text) }
+
+        let verdict = gate.admit(text)
+        guard case .speak(let sentence) = verdict else {
+            if tracing {
+                NSLog("TRACE gate=drop ly-do=%@", gate.lastDropReason?.rawValue ?? "?")
+            }
+            return
+        }
+        if tracing { NSLog("TRACE gate=speak \"%@\"", sentence) }
+
+        let droppedBefore = speechQueue.droppedCount
+        let immediate = speechQueue.enqueue(sentence)
+        if tracing {
+            let dropped = speechQueue.droppedCount - droppedBefore
+            if dropped > 0 {
+                NSLog("TRACE queue=TRAN bo-%d-cau cho=%d (giong doc khong theo kip)",
+                      dropped, speechQueue.pendingCount)
+            } else {
+                NSLog("TRACE queue=%@ cho=%d",
+                      immediate == nil ? "xep-hang" : "doc-ngay", speechQueue.pendingCount)
+            }
+        }
+        guard let immediate else { return }
         speech.speak(immediate, rate: settings.speechRate, volume: settings.volume)
     }
 

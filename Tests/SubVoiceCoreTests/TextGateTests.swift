@@ -91,3 +91,33 @@ import Testing
 @Test func similarityHandlesEmptyStrings() {
     #expect(TextGate.similarity("", "") == 1.0)
 }
+
+@Test func gateRecordsIdenticalDropReason() {
+    var gate = TextGate()
+    _ = gate.admit("Xin chào bạn")
+    _ = gate.admit("Xin chào bạn")
+    #expect(gate.lastDropReason == .identical)
+}
+
+@Test func gateRecordsSimilarityDropReason() {
+    var gate = TextGate()
+    _ = gate.admit("Anh ấy đã rời khỏi thành phố từ sáng sớm hôm qua.")
+    _ = gate.admit("Anh ấy đã rời khỏi thành phô từ sáng sớm hôm qua.")
+    #expect(gate.lastDropReason == .tooSimilar)
+}
+
+@Test func gateRecordsNormalizerDropReason() {
+    var gate = TextGate()
+    _ = gate.admit("--- 123 ---")
+    #expect(gate.lastDropReason == .rejectedByNormalizer)
+}
+
+@Test func gateClearsDropReasonWhenItSpeaks() {
+    var gate = TextGate()
+    _ = gate.admit("Xin chào bạn")
+    _ = gate.admit("Xin chào bạn")
+    #expect(gate.lastDropReason == .identical)
+
+    _ = gate.admit("Đừng nói với ai về chuyện này, được chứ?")
+    #expect(gate.lastDropReason == nil)
+}

@@ -36,11 +36,15 @@ public struct BrightnessSignature: Equatable, Sendable {
 public struct ChangeDetector {
     private var previous: BrightnessSignature?
 
+    /// Kết quả của khung trước, để bên gọi chỉ ghi log khi trạng thái đổi.
+    public private(set) var previousVerdict: FrameVerdict?
+
     public init() {}
 
     /// Xoá lịch sử. Khung hình kế tiếp chắc chắn được coi là `.changed`.
     public mutating func reset() {
         previous = nil
+        previousVerdict = nil
     }
 
     /// Tính chữ ký từ buffer BGRA.
@@ -95,7 +99,17 @@ public struct ChangeDetector {
 
     /// So chữ ký này với chữ ký của khung trước.
     public mutating func evaluate(_ signature: BrightnessSignature) -> FrameVerdict {
-        defer { previous = signature }
+        let verdict = verdictFor(signature)
+        previous = signature
+        previousVerdict = verdict
+        return verdict
+    }
+
+    /// Tỉ lệ pixel sáng của khung vừa xét. Dùng khi chỉnh `blankFloor`.
+    public private(set) var lastTotalBrightness: Float = 0
+
+    private mutating func verdictFor(_ signature: BrightnessSignature) -> FrameVerdict {
+        lastTotalBrightness = signature.total
 
         guard signature.total >= DetectorTuning.blankFloor else {
             return .blank
@@ -109,7 +123,11 @@ public struct ChangeDetector {
             distance += abs(signature.columns[i] - previous.columns[i])
         }
         distance /= Float(signature.columns.count)
+        lastDistance = distance
 
         return distance < DetectorTuning.changeThreshold ? .unchanged : .changed
     }
+
+    /// Khoảng cách L1 của khung vừa xét. Dùng khi chỉnh `changeThreshold`.
+    public private(set) var lastDistance: Float = 0
 }

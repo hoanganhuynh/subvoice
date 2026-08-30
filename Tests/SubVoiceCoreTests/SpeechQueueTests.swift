@@ -61,3 +61,26 @@ import Testing
 @Test func maxPendingMatchesSpec() {
     #expect(SpeechQueue.maxPending == 2)
 }
+
+@Test func queueCountsSentencesDroppedByCapacity() {
+    var queue = SpeechQueue()
+    _ = queue.enqueue("đang đọc")
+    _ = queue.enqueue("chờ một")
+    _ = queue.enqueue("chờ hai")
+    #expect(queue.droppedCount == 0)
+
+    _ = queue.enqueue("chờ ba")
+    #expect(queue.droppedCount == 1)
+
+    _ = queue.enqueue("chờ bốn")
+    #expect(queue.droppedCount == 2)
+}
+
+@Test func resetClearsDroppedCount() {
+    var queue = SpeechQueue()
+    for text in ["a", "b", "c", "d"] { _ = queue.enqueue(text) }
+    #expect(queue.droppedCount > 0)
+
+    queue.reset()
+    #expect(queue.droppedCount == 0)
+}

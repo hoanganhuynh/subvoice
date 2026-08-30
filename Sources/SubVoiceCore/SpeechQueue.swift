@@ -8,6 +8,10 @@ public struct SpeechQueue {
     private var pending: [String] = []
     private var speaking = false
 
+    /// Số câu đã bị bỏ vì hàng đợi vượt trần. Nếu con số này tăng thì giọng đọc
+    /// không theo kịp phụ đề — chỉnh tốc độ đọc, không phải chỉnh ngưỡng.
+    public private(set) var droppedCount = 0
+
     public init() {}
 
     public var pendingCount: Int { pending.count }
@@ -22,6 +26,7 @@ public struct SpeechQueue {
         pending.append(text)
         while pending.count > SpeechQueue.maxPending {
             pending.removeFirst()
+            droppedCount += 1
         }
         return nil
     }
@@ -39,5 +44,6 @@ public struct SpeechQueue {
     public mutating func reset() {
         pending.removeAll()
         speaking = false
+        droppedCount = 0
     }
 }
