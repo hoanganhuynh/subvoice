@@ -1,0 +1,7 @@
+.build/
+.swiftpm/
+*.xcodeproj
+build/
+SubVoice.app/
+DerivedData/
+.DS_Store
