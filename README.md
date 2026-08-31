@@ -160,7 +160,6 @@ Tests/
 └── SubVoiceCoreTests/
 ```
 
-
 ## Kiểm thử
 
 Chạy toàn bộ unit test và performance test:

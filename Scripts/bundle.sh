@@ -25,6 +25,8 @@ mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
 
 cp "${BUILD_DIR}/SubVoiceApp" "${APP_DIR}/Contents/MacOS/SubVoiceApp"
 cp Resources/Info.plist "${APP_DIR}/Contents/Info.plist"
+cp Resources/AppIcon.icns "${APP_DIR}/Contents/Resources/AppIcon.icns"
+cp Resources/Assets.car "${APP_DIR}/Contents/Resources/Assets.car"
 
 # Tự dò một chứng chỉ ổn định nếu chưa đặt biến môi trường. Chữ ký ad-hoc gắn
 # danh tính app vào cdhash của binary, mà cdhash đổi sau MỖI lần build -> quyền
