@@ -1,16 +1,11 @@
-/// Hàng đợi câu chờ đọc, có trần.
+/// Hàng đợi câu chờ đọc.
 ///
-/// Vượt trần thì bỏ câu CŨ NHẤT chứ không bỏ câu mới: câu mới bám sát cảnh
-/// người dùng đang xem hơn, còn câu cũ đã trôi qua trên màn hình rồi.
+/// Không có trần: mọi câu OCR đọc được đều phải được đọc thành tiếng, theo đúng
+/// thứ tự xuất hiện. Đánh đổi là nếu giọng đọc chậm hơn nhịp phụ đề thì nó sẽ
+/// tụt lại dần so với hình — bù bằng cách tăng tốc độ đọc trong menu.
 public struct SpeechQueue {
-    public static let maxPending = 2
-
     private var pending: [String] = []
     private var speaking = false
-
-    /// Số câu đã bị bỏ vì hàng đợi vượt trần. Nếu con số này tăng thì giọng đọc
-    /// không theo kịp phụ đề — chỉnh tốc độ đọc, không phải chỉnh ngưỡng.
-    public private(set) var droppedCount = 0
 
     public init() {}
 
@@ -24,10 +19,6 @@ public struct SpeechQueue {
             return text
         }
         pending.append(text)
-        while pending.count > SpeechQueue.maxPending {
-            pending.removeFirst()
-            droppedCount += 1
-        }
         return nil
     }
 
@@ -44,6 +35,5 @@ public struct SpeechQueue {
     public mutating func reset() {
         pending.removeAll()
         speaking = false
-        droppedCount = 0
     }
 }

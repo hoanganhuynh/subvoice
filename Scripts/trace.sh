@@ -1,9 +1,11 @@
 #!/bin/bash
-# Đọc log chẩn đoán của SubVoice. Mặc định 10 phút gần nhất.
-#   ./Scripts/trace.sh          # 10 phút
-#   ./Scripts/trace.sh 3m       # 3 phút
+# Đọc file trace của SubVoice (chỉ có khi chạy app với cờ --trace).
+#   ./Scripts/trace.sh        # toàn bộ
+#   ./Scripts/trace.sh 60     # 60 dòng cuối
 set -uo pipefail
-WINDOW="${1:-10m}"
-log show --predicate 'process == "SubVoiceApp"' --last "${WINDOW}" --style compact 2>/dev/null \
-  | grep -E "TRACE|Độ trễ" \
-  | sed -E 's/^[^ ]+ +([0-9:.]+) +.*(TRACE|Độ trễ)/\1 \2/'
+FILE=/tmp/subvoice-trace.log
+if [ ! -f "${FILE}" ]; then
+    echo "Chưa có ${FILE}. Chạy: open ~/Applications/SubVoice.app --args --trace"
+    exit 1
+fi
+if [ $# -ge 1 ]; then tail -n "$1" "${FILE}"; else cat "${FILE}"; fi

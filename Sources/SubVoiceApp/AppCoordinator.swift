@@ -13,6 +13,7 @@ struct FrameDecision {
     /// Verdict có khác khung trước không — để chỉ log lúc đổi trạng thái.
     let isTransition: Bool
     let distance: Float
+    let relative: Float
     let brightness: Float
 }
 
@@ -27,6 +28,7 @@ final class CaptureQueueState {
             verdict: verdict,
             isTransition: before != verdict,
             distance: detector.lastDistance,
+            relative: detector.lastRelativeDistance,
             brightness: detector.lastTotalBrightness
         )
     }
@@ -50,7 +52,7 @@ final class CaptureQueueState {
 final class AppCoordinator {
 
     private let capturer = ScreenCapturer()
-    private let speech = SystemSpeechBackend()
+    private let systemSpeech = SystemSpeechBackend()
     private let regionSelector = RegionSelector()
     private let hotKeys = HotKeyManager()
     private var menuBar: MenuBarController!
@@ -59,18 +61,25 @@ final class AppCoordinator {
     // OCREngine tự khoá bên trong; CaptureQueueState chỉ có đúng một luồng dùng.
     nonisolated(unsafe) private let ocr = OCREngine()
     nonisolated(unsafe) private let captureState = CaptureQueueState()
-    nonisolated(unsafe) private let latencyLock = NSLock()
+    nonisolated private let latencyLock = NSLock()
     nonisolated(unsafe) private var changeDetectedAt: Date?
 
     private var gate = TextGate()
     private var speechQueue = SpeechQueue()
     private var settings = Store.loadSettings()
+    private lazy var kokoroSpeech = KokoroSpeechBackend(
+        voiceIdentifier: settings.kokoroVoiceIdentifier
+    )
     private var region = Store.loadRegion()
     private var isRunning = false
 
+    private var speech: SpeechBackend {
+        settings.speechEngine == .kokoro ? kokoroSpeech : systemSpeech
+    }
+
     private var latencies: [Double] = []
     private let measuringLatency = CommandLine.arguments.contains("--measure-latency")
-    nonisolated(unsafe) private let tracing = CommandLine.arguments.contains("--trace")
+    nonisolated private let tracing = CommandLine.arguments.contains("--trace")
 
     func start() {
         if CommandLine.arguments.contains("--check-permission") {
@@ -80,7 +89,7 @@ final class AppCoordinator {
             // Terminal, và Terminal thường đã có sẵn quyền Screen Recording.
             let report = """
             screen-recording-granted: \(PermissionHelper.hasScreenRecordingAccess)
-            vietnamese-voice-found:   \(speech.hasVietnameseVoice)
+            vietnamese-voice-found:   \(systemSpeech.hasVietnameseVoice)
             bundle-id:                \(Bundle.main.bundleIdentifier ?? "khong co bundle")
             """
             print(report)
@@ -92,7 +101,22 @@ final class AppCoordinator {
             exit(0)
         }
 
-        menuBar = MenuBarController(settings: settings)
+        // Lựa chọn cũ có thể biến mất khi người dùng gỡ voice pack khỏi macOS;
+        // backend sẽ trả về giọng fallback thực sự đang dùng để menu đánh dấu
+        // đúng mục và lưu lại lựa chọn hợp lệ.
+        settings.speechVoiceIdentifier = systemSpeech.selectVoice(
+            identifier: settings.speechVoiceIdentifier
+        )
+        if settings.speechEngine == .kokoro && !kokoroSpeech.isAvailable {
+            NSLog("Không dùng được Kokoro: %@", kokoroSpeech.unavailableReason ?? "không rõ lỗi")
+            settings.speechEngine = .system
+        }
+        Store.saveSettings(settings)
+        menuBar = MenuBarController(
+            settings: settings,
+            voices: voicesForCurrentEngine(),
+            kokoroAvailable: kokoroSpeech.isAvailable
+        )
         wireMenuBar()
         wirePipeline()
 
@@ -112,7 +136,7 @@ final class AppCoordinator {
             return
         }
 
-        if !speech.hasVietnameseVoice {
+        if settings.speechEngine == .system && !systemSpeech.hasVietnameseVoice {
             menuBar.setState(.warning("Thiếu giọng tiếng Việt — bấm để xem hướng dẫn"))
         } else if !PermissionHelper.hasScreenRecordingAccess {
             menuBar.setState(.warning("Cần quyền Screen Recording — bấm để mở cài đặt"))
@@ -139,6 +163,24 @@ final class AppCoordinator {
     private func wireMenuBar() {
         menuBar.onToggle = { [weak self] in self?.toggle() }
         menuBar.onReselect = { [weak self] in self?.reselectRegion() }
+        menuBar.onEngineChange = { [weak self] engine in
+            self?.switchSpeechEngine(to: engine)
+        }
+        menuBar.onVoiceChange = { [weak self] identifier in
+            guard let self else { return }
+            // Utterance đang đọc đã giữ voice riêng; lựa chọn mới sẽ có hiệu
+            // lực ở câu kế tiếp, không làm đứt câu hiện tại.
+            if self.settings.speechEngine == .kokoro {
+                self.settings.kokoroVoiceIdentifier = self.kokoroSpeech.selectVoice(
+                    identifier: identifier
+                )
+            } else {
+                self.settings.speechVoiceIdentifier = self.systemSpeech.selectVoice(
+                    identifier: identifier
+                )
+            }
+            Store.saveSettings(self.settings)
+        }
         menuBar.onRateChange = { [weak self] rate in
             guard let self else { return }
             self.settings.speechRate = rate
@@ -151,7 +193,7 @@ final class AppCoordinator {
         }
         menuBar.onWarningClicked = { [weak self] in
             guard let self else { return }
-            if !self.speech.hasVietnameseVoice {
+            if self.settings.speechEngine == .system && !self.systemSpeech.hasVietnameseVoice {
                 NSWorkspace.shared.open(URL(
                     string: "x-apple.systempreferences:com.apple.preference.universalaccess?SpeakableItems"
                 )!)
@@ -168,7 +210,7 @@ final class AppCoordinator {
     /// menu để không hiện cảnh báo đã cũ.
     private func refreshIdleState() {
         guard !isRunning else { return }
-        if !speech.hasVietnameseVoice {
+        if settings.speechEngine == .system && !systemSpeech.hasVietnameseVoice {
             menuBar.setState(.warning("Thiếu giọng tiếng Việt — bấm để xem hướng dẫn"))
         } else if !PermissionHelper.hasScreenRecordingAccess {
             menuBar.setState(.warning("Cần quyền Screen Recording — bấm để mở cài đặt"))
@@ -187,8 +229,59 @@ final class AppCoordinator {
         ocr.onText = { [weak self] text in
             Task { @MainActor in self?.handleText(text) }
         }
-        speech.onStart = { [weak self] in self?.handleSpeechStarted() }
-        speech.onFinish = { [weak self] in self?.handleSpeechFinished() }
+        configureSpeechBackend(systemSpeech)
+        configureSpeechBackend(kokoroSpeech)
+    }
+
+    private func configureSpeechBackend(_ backend: SpeechBackend) {
+        backend.onStart = { [weak self] in self?.handleSpeechStarted() }
+        backend.onFinish = { [weak self] in self?.handleSpeechFinished() }
+        backend.onError = { [weak self, weak backend] message in
+            guard let self, let backend, backend === self.kokoroSpeech else { return }
+            self.fallbackFromKokoro(message)
+        }
+    }
+
+    private func voicesForCurrentEngine() -> [SpeechVoiceOption] {
+        settings.speechEngine == .kokoro
+            ? KokoroSpeechBackend.availableVoices
+            : systemSpeech.availableVietnameseVoices
+    }
+
+    private func switchSpeechEngine(to engine: SpeechEngine) {
+        guard engine != settings.speechEngine else { return }
+        if engine == .kokoro && !kokoroSpeech.isAvailable {
+            menuBar.setSpeechEngine(.system)
+            menuBar.setState(.warning(kokoroSpeech.unavailableReason ?? "Chưa cài Kokoro"))
+            return
+        }
+
+        speechQueue.reset()
+        speech.stop()
+        settings.speechEngine = engine
+        Store.saveSettings(settings)
+        menuBar.setSpeechEngine(engine)
+        menuBar.setVoiceOptions(
+            voicesForCurrentEngine(),
+            selectedIdentifier: engine == .kokoro
+                ? settings.kokoroVoiceIdentifier : settings.speechVoiceIdentifier
+        )
+        speech.warmUp()
+        if isRunning { menuBar.setState(.listening) } else { refreshIdleState() }
+    }
+
+    private func fallbackFromKokoro(_ message: String) {
+        guard settings.speechEngine == .kokoro else { return }
+        NSLog("Kokoro lỗi, chuyển về giọng hệ thống: %@", message)
+        kokoroSpeech.stop()
+        settings.speechEngine = .system
+        Store.saveSettings(settings)
+        menuBar.setSpeechEngine(.system)
+        menuBar.setVoiceOptions(
+            systemSpeech.availableVietnameseVoices,
+            selectedIdentifier: settings.speechVoiceIdentifier
+        )
+        menuBar.setState(.warning("Kokoro lỗi — đã chuyển về giọng hệ thống"))
     }
 
     // MARK: - Máy trạng thái
@@ -273,15 +366,19 @@ final class AppCoordinator {
         if tracing {
             switch decision.verdict {
             case .changed:
-                NSLog("TRACE detector=changed dist=%.4f bright=%.4f",
-                      decision.distance, decision.brightness)
+                TraceLog.shared.write(String(
+                    format: "detector=changed   tuong-doi=%.2f  dist=%.4f  bright=%.4f",
+                    decision.relative, decision.distance, decision.brightness))
             case .blank where decision.isTransition:
-                NSLog("TRACE detector=blank bright=%.4f (nguong blank=%.4f)",
-                      decision.brightness, DetectorTuning.blankFloor)
-            case .unchanged where decision.distance >= DetectorTuning.changeThreshold * 0.4:
+                TraceLog.shared.write(String(
+                    format: "detector=blank    bright=%.4f  (nguong blank=%.4f)",
+                    decision.brightness, DetectorTuning.blankFloor))
+            case .unchanged where decision.relative >= DetectorTuning.relativeChangeThreshold * 0.5:
                 // Suýt vượt ngưỡng. Nếu câu bị bỏ qua thì đây chính là chỗ mất.
-                NSLog("TRACE detector=unchanged SUYT-VUOT dist=%.4f (nguong=%.4f)",
-                      decision.distance, DetectorTuning.changeThreshold)
+                TraceLog.shared.write(String(
+                    format: "detector=SUYT-VUOT tuong-doi=%.2f  (nguong=%.2f)  bright=%.4f",
+                    decision.relative, DetectorTuning.relativeChangeThreshold,
+                    decision.brightness))
             default:
                 break
             }
@@ -309,28 +406,22 @@ final class AppCoordinator {
     private func handleText(_ text: String) {
         guard isRunning else { return }
 
-        if tracing { NSLog("TRACE ocr=\"%@\"", text) }
+        if tracing { TraceLog.shared.write("ocr       \"\(text)\"") }
 
         let verdict = gate.admit(text)
         guard case .speak(let sentence) = verdict else {
             if tracing {
-                NSLog("TRACE gate=drop ly-do=%@", gate.lastDropReason?.rawValue ?? "?")
+                TraceLog.shared.write("  gate=BO   ly-do=\(gate.lastDropReason?.rawValue ?? "?")")
             }
             return
         }
-        if tracing { NSLog("TRACE gate=speak \"%@\"", sentence) }
+        if tracing { TraceLog.shared.write("  gate=DOC  \"\(sentence)\"") }
 
-        let droppedBefore = speechQueue.droppedCount
         let immediate = speechQueue.enqueue(sentence)
         if tracing {
-            let dropped = speechQueue.droppedCount - droppedBefore
-            if dropped > 0 {
-                NSLog("TRACE queue=TRAN bo-%d-cau cho=%d (giong doc khong theo kip)",
-                      dropped, speechQueue.pendingCount)
-            } else {
-                NSLog("TRACE queue=%@ cho=%d",
-                      immediate == nil ? "xep-hang" : "doc-ngay", speechQueue.pendingCount)
-            }
+            TraceLog.shared.write(
+                "  queue=\(immediate == nil ? "xep-hang" : "doc-ngay")"
+                + " cho=\(speechQueue.pendingCount)")
         }
         guard let immediate else { return }
         speech.speak(immediate, rate: settings.speechRate, volume: settings.volume)
@@ -348,6 +439,7 @@ final class AppCoordinator {
 
         let milliseconds = Date().timeIntervalSince(mark) * 1000
         latencies.append(milliseconds)
+        if tracing { TraceLog.shared.write(String(format: "  do-tre=%.0fms", milliseconds)) }
         NSLog("Độ trễ: %.0fms", milliseconds)
     }
 

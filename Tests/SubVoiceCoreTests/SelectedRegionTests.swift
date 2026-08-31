@@ -50,3 +50,47 @@ import CoreGraphics
     settings.volume = -3
     #expect(settings.volume == 0.0)
 }
+
+@Test func settingsPreserveSelectedVietnameseVoice() {
+    var settings = Settings()
+    #expect(settings.speechVoiceIdentifier == nil)
+
+    settings.speechVoiceIdentifier = "com.apple.voice.compact.vi-VN.Linh"
+    #expect(settings.speechVoiceIdentifier == "com.apple.voice.compact.vi-VN.Linh")
+}
+
+@Test func settingsPersistKokoroEngineAndVoice() throws {
+    var settings = Settings()
+    #expect(settings.speechEngine == .system)
+    #expect(settings.kokoroVoiceIdentifier == "diem_trinh")
+
+    settings.speechEngine = .kokoro
+    settings.kokoroVoiceIdentifier = "mai_linh"
+    let restored = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(settings))
+
+    #expect(restored.speechEngine == .kokoro)
+    #expect(restored.kokoroVoiceIdentifier == "mai_linh")
+}
+
+@Test func settingsDecodeLegacyDataBeforeEngineWasAdded() throws {
+    let legacy = Data(#"{"storedRate":0.475,"storedVolume":0.75,"storedVoiceIdentifier":"legacy-linh"}"#.utf8)
+
+    let restored = try JSONDecoder().decode(Settings.self, from: legacy)
+
+    #expect(restored.speechRate == 0.475)
+    #expect(restored.volume == 0.75)
+    #expect(restored.speechVoiceIdentifier == "legacy-linh")
+    #expect(restored.speechEngine == .system)
+    #expect(restored.kokoroVoiceIdentifier == "diem_trinh")
+}
+
+@Test func kokoroRatePresetsSpanAnAudiblyDistinctRange() {
+    let verySlow = SpeechRateMapping.kokoroSpeed(for: Settings.minimumRate)
+    let medium = SpeechRateMapping.kokoroSpeed(for: 0.55)
+    let veryFast = SpeechRateMapping.kokoroSpeed(for: Settings.maximumRate)
+
+    #expect(verySlow <= 0.65)
+    #expect(abs(medium - 1.0) < 0.001)
+    #expect(veryFast >= 1.55)
+    #expect(veryFast / verySlow >= 2.3)
+}

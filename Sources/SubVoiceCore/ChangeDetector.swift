@@ -10,8 +10,17 @@ public enum DetectorTuning {
     public static let columnCount = 64
     /// Tỉ lệ pixel sáng tối thiểu để coi là vùng có chữ.
     public static let blankFloor: Float = 0.002
-    /// Khoảng cách L1 chuẩn hoá để coi là đã đổi.
-    public static let changeThreshold: Float = 0.02
+    /// Mức đổi TƯƠNG ĐỐI so với lượng chữ đang có, để coi là đã đổi.
+    ///
+    /// Đo tuyệt đối là sai: chữ phụ đề chỉ chiếm khoảng 2% pixel của vùng, nên
+    /// thay cả câu cũng chỉ tạo ra khoảng cách L1 chừng 0.02 — lẫn hẳn vào
+    /// nhiễu của nền video, và càng chọn vùng rộng thì tín hiệu càng loãng.
+    /// Chia cho lượng chữ ít hơn của hai khung thì "thay trọn một câu" luôn
+    /// cho tỉ số quanh 1.0 bất kể vùng to nhỏ, và không phụ thuộc câu dài hay
+    /// ngắn đến trước.
+    public static let relativeChangeThreshold: Float = 0.60
+    /// Sàn tuyệt đối, chặn trường hợp độ sáng rất thấp làm tỉ số vọt lên.
+    public static let minAbsoluteDistance: Float = 0.002
     /// Giới hạn tần suất OCR cứng, tính bằng giây.
     public static let minOCRInterval: Double = 0.08
 }
@@ -125,9 +134,22 @@ public struct ChangeDetector {
         distance /= Float(signature.columns.count)
         lastDistance = distance
 
-        return distance < DetectorTuning.changeThreshold ? .unchanged : .changed
+        // Dùng lượng chữ ÍT HƠN trong hai khung. Một câu ngắn bị thay hẳn bởi
+        // câu dài vẫn là thay đổi lớn đối với câu ngắn; chia riêng cho khung
+        // mới sẽ làm kết quả phụ thuộc chiều chuyển câu và có thể bỏ sót nó.
+        let referenceBrightness = max(
+            min(signature.total, previous.total),
+            DetectorTuning.blankFloor
+        )
+        let relative = distance / referenceBrightness
+        lastRelativeDistance = relative
+
+        guard distance >= DetectorTuning.minAbsoluteDistance else { return .unchanged }
+        return relative < DetectorTuning.relativeChangeThreshold ? .unchanged : .changed
     }
 
-    /// Khoảng cách L1 của khung vừa xét. Dùng khi chỉnh `changeThreshold`.
+    /// Khoảng cách L1 tuyệt đối của khung vừa xét.
     public private(set) var lastDistance: Float = 0
+    /// Khoảng cách đã chia cho độ sáng. Đây mới là số dùng để chỉnh ngưỡng.
+    public private(set) var lastRelativeDistance: Float = 0
 }

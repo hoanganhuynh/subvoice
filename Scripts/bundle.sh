@@ -10,6 +10,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+PROJECT_DIR="$(pwd)"
 
 CONFIG="${1:-release}"
 APP_NAME="SubVoice"
@@ -51,6 +52,29 @@ fi
 mkdir -p "${INSTALL_DIR}"
 rm -rf "${INSTALL_DIR}/${APP_NAME}.app"
 cp -R "${APP_DIR}" "${INSTALL_DIR}/${APP_NAME}.app"
+
+# Kokoro nặng khoảng 1.3 GB nên chỉ cài khi người dùng chủ động bật cờ này.
+# Runtime nằm ngoài .app để việc build/ký lại app không phải sao chép model
+# mỗi lần và để backend có thể tìm ở đường dẫn ổn định.
+if [ "${SUBVOICE_INCLUDE_KOKORO:-0}" = "1" ]; then
+    KOKORO_SOURCE="${PROJECT_DIR}/ThirdParty/Kokoro-Vietnamese"
+    KOKORO_RUNTIME="${HOME}/Library/Application Support/SubVoice/Kokoro"
+    if [ ! -x "${KOKORO_SOURCE}/.venv/bin/python" ] \
+        || [ ! -f "${KOKORO_SOURCE}/models/kokoro_vi.onnx" ]; then
+        echo "LỖI: chưa có runtime Kokoro tại ${KOKORO_SOURCE}" >&2
+        exit 1
+    fi
+
+    mkdir -p "${KOKORO_RUNTIME}"
+    ditto "${KOKORO_SOURCE}/.venv" "${KOKORO_RUNTIME}/.venv"
+    ditto "${KOKORO_SOURCE}/models" "${KOKORO_RUNTIME}/models"
+    ditto "${KOKORO_SOURCE}/src" "${KOKORO_RUNTIME}/src"
+    cp "${PROJECT_DIR}/Resources/kokoro_service.py" "${KOKORO_RUNTIME}/kokoro_service.py"
+    if [ -f "${KOKORO_SOURCE}/LICENSE" ]; then
+        cp "${KOKORO_SOURCE}/LICENSE" "${KOKORO_RUNTIME}/LICENSE"
+    fi
+    echo "Đã cài Kokoro: ${KOKORO_RUNTIME}"
+fi
 
 echo "Đã cài: ${INSTALL_DIR}/${APP_NAME}.app"
 echo "Chạy:   open ${INSTALL_DIR}/${APP_NAME}.app"

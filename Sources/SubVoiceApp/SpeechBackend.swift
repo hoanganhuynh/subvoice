@@ -7,6 +7,8 @@ protocol SpeechBackend: AnyObject {
     var onStart: (() -> Void)? { get set }
     /// Gọi trên main thread khi đọc xong một câu.
     var onFinish: (() -> Void)? { get set }
+    /// Gọi khi backend không thể tạo hoặc phát âm thanh.
+    var onError: ((String) -> Void)? { get set }
 
     /// Nạp sẵn tài nguyên để câu đầu tiên không bị trễ thêm.
     func warmUp()

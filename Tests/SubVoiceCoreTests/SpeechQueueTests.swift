@@ -33,16 +33,32 @@ import Testing
     #expect(!queue.isSpeaking)
 }
 
-@Test func queueDropsOldestWhenOverCapacity() {
+@Test func queueNeverDropsASentence() {
     var queue = SpeechQueue()
     _ = queue.enqueue("đang đọc")
-    _ = queue.enqueue("chờ một")
-    _ = queue.enqueue("chờ hai")
-    _ = queue.enqueue("chờ ba")   // vượt trần -> "chờ một" bị bỏ
+    for text in ["một", "hai", "ba", "bốn", "năm"] {
+        #expect(queue.enqueue(text) == nil)
+    }
 
-    #expect(queue.pendingCount == SpeechQueue.maxPending)
-    #expect(queue.finished() == "chờ hai")
-    #expect(queue.finished() == "chờ ba")
+    #expect(queue.pendingCount == 5)
+    #expect(queue.finished() == "một")
+    #expect(queue.finished() == "hai")
+    #expect(queue.finished() == "ba")
+    #expect(queue.finished() == "bốn")
+    #expect(queue.finished() == "năm")
+    #expect(queue.finished() == nil)
+    #expect(!queue.isSpeaking)
+}
+
+@Test func queuePreservesOrderUnderInterleavedUse() {
+    var queue = SpeechQueue()
+    #expect(queue.enqueue("một") == "một")
+    _ = queue.enqueue("hai")
+    #expect(queue.finished() == "hai")
+    _ = queue.enqueue("ba")
+    _ = queue.enqueue("bốn")
+    #expect(queue.finished() == "ba")
+    #expect(queue.finished() == "bốn")
     #expect(queue.finished() == nil)
 }
 
@@ -56,31 +72,4 @@ import Testing
     #expect(queue.pendingCount == 0)
     #expect(!queue.isSpeaking)
     #expect(queue.enqueue("câu mới") == "câu mới")
-}
-
-@Test func maxPendingMatchesSpec() {
-    #expect(SpeechQueue.maxPending == 2)
-}
-
-@Test func queueCountsSentencesDroppedByCapacity() {
-    var queue = SpeechQueue()
-    _ = queue.enqueue("đang đọc")
-    _ = queue.enqueue("chờ một")
-    _ = queue.enqueue("chờ hai")
-    #expect(queue.droppedCount == 0)
-
-    _ = queue.enqueue("chờ ba")
-    #expect(queue.droppedCount == 1)
-
-    _ = queue.enqueue("chờ bốn")
-    #expect(queue.droppedCount == 2)
-}
-
-@Test func resetClearsDroppedCount() {
-    var queue = SpeechQueue()
-    for text in ["a", "b", "c", "d"] { _ = queue.enqueue(text) }
-    #expect(queue.droppedCount > 0)
-
-    queue.reset()
-    #expect(queue.droppedCount == 0)
 }

@@ -113,6 +113,30 @@ private func signature(_ bytes: [UInt8], width: Int, height: Int) -> BrightnessS
     #expect(verdict == .changed)
 }
 
+@Test func replacingShorterSubtitleIsDetectedInEitherOrder() {
+    // Câu dài phủ 24 cột, câu ngắn phủ 16 cột và chỉ chồng 14 cột. Khoảng
+    // cách tuyệt đối chỉ là 0.015 (< ngưỡng cũ 0.02), nhưng bằng 75% lượng
+    // chữ của câu ngắn: đây phải là một lần đổi phụ đề, bất kể câu nào đến
+    // trước. Chia riêng cho khung mới khiến chiều ngắn -> dài chỉ còn 50% và
+    // làm mất câu đó.
+    let long = BrightnessSignature(
+        columns: (0..<DetectorTuning.columnCount).map { (0..<24).contains($0) ? 0.08 : 0 },
+        total: 0.03
+    )
+    let short = BrightnessSignature(
+        columns: (0..<DetectorTuning.columnCount).map { (10..<26).contains($0) ? 0.08 : 0 },
+        total: 0.02
+    )
+
+    var longThenShort = ChangeDetector()
+    _ = longThenShort.evaluate(long)
+    #expect(longThenShort.evaluate(short) == .changed)
+
+    var shortThenLong = ChangeDetector()
+    _ = shortThenLong.evaluate(short)
+    #expect(shortThenLong.evaluate(long) == .changed)
+}
+
 @Test func textDisappearingReportsBlank() {
     let w = 240, h = 60
     var detector = ChangeDetector()
