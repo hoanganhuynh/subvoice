@@ -61,6 +61,7 @@ final class AppCoordinator {
 
     /// Nguồn trạng thái duy nhất mà cửa sổ chính và menu bar cùng đọc.
     let viewModel = AppViewModel(state: AppViewState())
+    private var mainWindow: MainWindowController!
 
     // Chạm từ hàng đợi bắt màn hình, nên không thể mang isolation của MainActor.
     // OCREngine tự khoá bên trong; CaptureQueueState chỉ có đúng một luồng dùng.
@@ -118,6 +119,8 @@ final class AppCoordinator {
         }
         Store.saveSettings(settings)
         menuBar = MenuBarController()
+        mainWindow = MainWindowController(viewModel: viewModel)
+        mainWindow.apply(theme: settings.themeMode)
         viewModel.onIntent = { [weak self] intent in self?.handle(intent) }
         wireMenuBar()
         wirePipeline()
@@ -138,6 +141,13 @@ final class AppCoordinator {
             return
         }
 
+        if CommandLine.arguments.contains("--smoke-window") {
+            runWindowSmokeTest()
+            return
+        }
+
+        showMainWindow()
+
         refreshIdleState()
     }
 
@@ -156,11 +166,33 @@ final class AppCoordinator {
         }
     }
 
+    /// Mở cửa sổ chính rồi tự thoát, để `Scripts/smoke-window.sh` xác nhận
+    /// vòng đời Dock + cửa sổ vẫn dựng được sau mỗi lần đổi Info.plist hoặc
+    /// activation policy.
+    private func runWindowSmokeTest() {
+        showMainWindow()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let report = self.mainWindow.isVisible ? "WINDOW-SMOKE-OK\n" : "WINDOW-SMOKE-FAIL\n"
+            try? report.write(
+                toFile: "/tmp/subvoice-window-smoke.txt",
+                atomically: true,
+                encoding: .utf8
+            )
+            exit(0)
+        }
+    }
+
     // MARK: - Nối dây
 
     private func wireMenuBar() {
         menuBar.onIntent = { [weak self] intent in self?.handle(intent) }
+        menuBar.onOpenWindow = { [weak self] in self?.showMainWindow() }
         menuBar.onMenuWillOpen = { [weak self] in self?.refreshIdleState() }
+    }
+
+    func showMainWindow() {
+        mainWindow?.show()
     }
 
     // MARK: - Ảnh chụp trạng thái
@@ -227,12 +259,13 @@ final class AppCoordinator {
             settings.themeMode = theme
             Store.saveSettings(settings)
             publishSnapshot()
+            mainWindow.apply(theme: theme)
         case .setLaunchAtLogin(let enabled):
             setLaunchAtLogin(enabled)
         case .recover(let action):
             recover(action)
         case .showMainWindow:
-            break   // cửa sổ chính được nối ở bước sau
+            showMainWindow()
         case .quit:
             NSApp.terminate(nil)
         }

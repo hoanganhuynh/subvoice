@@ -8,5 +8,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         coordinator.start()
     }
 
+    /// Bấm Dock icon lúc cửa sổ đã bị đóng phải mở lại cửa sổ, không phải mở
+    /// một cửa sổ mới hay không làm gì.
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows: Bool
+    ) -> Bool {
+        coordinator.showMainWindow()
+        return true
+    }
+
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
 }

@@ -15,8 +15,9 @@ struct SubVoiceMain {
         let delegate = AppDelegate()
         retainedDelegate = delegate
         application.delegate = delegate
-        // Không icon Dock, không cửa sổ — chỉ sống trên menu bar.
-        application.setActivationPolicy(.accessory)
+        // Có Dock icon và cửa sổ chính; menu bar vẫn giữ cho thao tác nhanh.
+        application.setActivationPolicy(.regular)
+        ApplicationMenu.install(into: application)
         application.run()
     }
 }
