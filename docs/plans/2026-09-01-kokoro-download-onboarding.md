@@ -107,7 +107,10 @@ depend on this answer, and the design must be revisited.
 ```bash
 codesign -dv ./python/bin/python3 2>&1 | head -3
 xattr -l ./python/bin/python3
-./python/bin/python3 -c "import onnxruntime, numpy, soundfile; print('IMPORT-OK')"
+# PYTHONPATH là bắt buộc: `pip install --target` đặt package ra ngoài thư mục
+# mặc định của interpreter, nên thiếu nó sẽ báo ModuleNotFoundError và làm ta
+# tưởng gói hỏng.
+PYTHONPATH=./site-packages ./python/bin/python3 -c "import onnxruntime, numpy, soundfile; print('IMPORT-OK')"
 ```
 
 Expected: `IMPORT-OK`. Record whether `codesign -dv` reports a signature.
