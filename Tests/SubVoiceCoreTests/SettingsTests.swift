@@ -13,4 +13,16 @@ struct SettingsTests {
         let settings = try JSONDecoder().decode(Settings.self, from: data)
         #expect(settings.themeMode == .system)
     }
+
+    @Test func onboardingFlagDefaultsToFalseAndSurvivesARoundTrip() throws {
+        #expect(Settings().hasCompletedOnboarding == false)
+
+        let old = Data(#"{"storedRate":0.55,"storedVolume":1}"#.utf8)
+        #expect(try JSONDecoder().decode(Settings.self, from: old).hasCompletedOnboarding == false)
+
+        var settings = Settings()
+        settings.hasCompletedOnboarding = true
+        let encoded = try JSONEncoder().encode(settings)
+        #expect(try JSONDecoder().decode(Settings.self, from: encoded).hasCompletedOnboarding)
+    }
 }
