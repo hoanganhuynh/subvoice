@@ -262,6 +262,9 @@ final class AppCoordinator {
             mainWindow.apply(theme: theme)
         case .setLaunchAtLogin(let enabled):
             setLaunchAtLogin(enabled)
+        case .downloadKokoro, .cancelKokoroDownload:
+            // Bộ tải Kokoro được nối dây ở task sau; hiện chưa làm gì.
+            break
         case .recover(let action):
             recover(action)
         case .showMainWindow:

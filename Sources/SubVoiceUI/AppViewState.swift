@@ -67,6 +67,7 @@ public struct AppViewState: Equatable, Sendable {
     public var systemVoiceStatus: DiagnosticStatus = .unavailable("Chưa kiểm tra")
     public var kokoroStatus: DiagnosticStatus = .unavailable("Chưa kiểm tra")
     public var kokoroAvailable = false
+    public var kokoroInstall: KokoroInstallState = .notInstalled
     public var launchAtLoginEnabled = false
 
     public init() {}
@@ -103,6 +104,8 @@ public enum AppIntent: Equatable, Sendable {
     case copyTranscript([UUID])
     case setTheme(ThemeMode)
     case setLaunchAtLogin(Bool)
+    case downloadKokoro
+    case cancelKokoroDownload
     case recover(RecoveryAction)
     case showMainWindow
     case quit
