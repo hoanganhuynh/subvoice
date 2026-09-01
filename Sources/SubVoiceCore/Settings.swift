@@ -19,6 +19,7 @@ public struct Settings: Codable, Equatable, Sendable {
     private var storedSpeechEngine: SpeechEngine = .system
     private var storedKokoroVoiceIdentifier = "diem_trinh"
     private var storedThemeMode: ThemeMode = .system
+    private var storedHasCompletedOnboarding = false
 
     public init() {}
 
@@ -29,6 +30,7 @@ public struct Settings: Codable, Equatable, Sendable {
         case storedSpeechEngine
         case storedKokoroVoiceIdentifier
         case storedThemeMode
+        case storedHasCompletedOnboarding
     }
 
     public init(from decoder: Decoder) throws {
@@ -55,6 +57,10 @@ public struct Settings: Codable, Equatable, Sendable {
             forKey: .storedThemeMode
         )
         themeMode = (decodedTheme ?? nil) ?? .system
+        hasCompletedOnboarding = try values.decodeIfPresent(
+            Bool.self,
+            forKey: .storedHasCompletedOnboarding
+        ) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -65,6 +71,7 @@ public struct Settings: Codable, Equatable, Sendable {
         try values.encode(storedSpeechEngine, forKey: .storedSpeechEngine)
         try values.encode(storedKokoroVoiceIdentifier, forKey: .storedKokoroVoiceIdentifier)
         try values.encode(storedThemeMode, forKey: .storedThemeMode)
+        try values.encode(storedHasCompletedOnboarding, forKey: .storedHasCompletedOnboarding)
     }
 
     public var speechRate: Float {
@@ -97,5 +104,10 @@ public struct Settings: Codable, Equatable, Sendable {
     public var themeMode: ThemeMode {
         get { storedThemeMode }
         set { storedThemeMode = newValue }
+    }
+
+    public var hasCompletedOnboarding: Bool {
+        get { storedHasCompletedOnboarding }
+        set { storedHasCompletedOnboarding = newValue }
     }
 }
