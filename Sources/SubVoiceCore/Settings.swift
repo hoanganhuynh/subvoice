@@ -18,6 +18,7 @@ public struct Settings: Codable, Equatable, Sendable {
     private var storedVoiceIdentifier: String?
     private var storedSpeechEngine: SpeechEngine = .system
     private var storedKokoroVoiceIdentifier = "diem_trinh"
+    private var storedThemeMode: ThemeMode = .system
 
     public init() {}
 
@@ -27,6 +28,7 @@ public struct Settings: Codable, Equatable, Sendable {
         case storedVoiceIdentifier
         case storedSpeechEngine
         case storedKokoroVoiceIdentifier
+        case storedThemeMode
     }
 
     public init(from decoder: Decoder) throws {
@@ -46,6 +48,13 @@ public struct Settings: Codable, Equatable, Sendable {
             String.self,
             forKey: .storedKokoroVoiceIdentifier
         ) ?? "diem_trinh"
+        // Bản cũ chưa có khoá này, và giá trị lạ (do sửa tay UserDefaults) cũng
+        // không nên làm hỏng toàn bộ cài đặt — cả hai đều quay về `.system`.
+        let decodedTheme = try? values.decodeIfPresent(
+            ThemeMode.self,
+            forKey: .storedThemeMode
+        )
+        themeMode = (decodedTheme ?? nil) ?? .system
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -55,6 +64,7 @@ public struct Settings: Codable, Equatable, Sendable {
         try values.encodeIfPresent(storedVoiceIdentifier, forKey: .storedVoiceIdentifier)
         try values.encode(storedSpeechEngine, forKey: .storedSpeechEngine)
         try values.encode(storedKokoroVoiceIdentifier, forKey: .storedKokoroVoiceIdentifier)
+        try values.encode(storedThemeMode, forKey: .storedThemeMode)
     }
 
     public var speechRate: Float {
@@ -82,5 +92,10 @@ public struct Settings: Codable, Equatable, Sendable {
     public var kokoroVoiceIdentifier: String {
         get { storedKokoroVoiceIdentifier }
         set { storedKokoroVoiceIdentifier = newValue }
+    }
+
+    public var themeMode: ThemeMode {
+        get { storedThemeMode }
+        set { storedThemeMode = newValue }
     }
 }

@@ -1,11 +1,6 @@
 import AVFoundation
 import Foundation
-
-/// Một giọng tiếng Việt có thể chọn trong menu.
-struct SpeechVoiceOption: Equatable {
-    let identifier: String
-    let name: String
-}
+import SubVoiceCore
 
 /// Đọc bằng `AVSpeechSynthesizer` với giọng tiếng Việt offline của macOS.
 /// Khoảng 50ms là có tiếng — đây là lý do nó được chọn thay vì engine neural.
