@@ -1,25 +1,15 @@
 import AppKit
-import ServiceManagement
 import SubVoiceCore
+import SubVoiceUI
 
+/// Menu bar chỉ VẼ lại `AppViewState` và phát intent. Nó không giữ bản sao
+/// `Settings` riêng nữa — trước đây menu và cửa sổ dễ lệch nhau vì mỗi bên tự
+/// nhớ một phần trạng thái.
 @MainActor
 final class MenuBarController: NSObject, NSMenuDelegate {
 
-    enum State {
-        case stopped
-        case listening
-        case speaking
-        case warning(String)
-    }
-
-    var onToggle: (() -> Void)?
-    var onReselect: (() -> Void)?
-    var onEngineChange: ((SpeechEngine) -> Void)?
-    var onVoiceChange: ((String) -> Void)?
-    var onRateChange: ((Float) -> Void)?
-    var onVolumeChange: ((Float) -> Void)?
-    var onWarningClicked: (() -> Void)?
-    var onQuit: (() -> Void)?
+    var onIntent: ((AppIntent) -> Void)?
+    var onOpenWindow: (() -> Void)?
     /// Quyền hệ thống có thể đổi lúc app đang chạy, nên trạng thái phải được
     /// tính lại mỗi lần mở menu thay vì chỉ tính một lần lúc khởi động.
     var onMenuWillOpen: (() -> Void)?
@@ -29,71 +19,44 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let toggleItem = NSMenuItem()
     private let warningItem = NSMenuItem()
     private let voiceMenu = NSMenu()
-    private var voices: [SpeechVoiceOption]
     private var engineItems: [NSMenuItem] = []
     private var voiceItems: [NSMenuItem] = []
     private var rateItems: [NSMenuItem] = []
     private var volumeItems: [NSMenuItem] = []
     private let launchAtLoginItem = NSMenuItem()
 
-    private var settings: Settings
+    /// Danh sách giọng đang hiện, để chỉ dựng lại submenu khi nó thực sự đổi.
+    private var renderedVoices: [SpeechVoiceOption] = []
 
-    private let kokoroAvailable: Bool
-
-    init(settings: Settings, voices: [SpeechVoiceOption], kokoroAvailable: Bool) {
-        self.settings = settings
-        self.voices = voices
-        self.kokoroAvailable = kokoroAvailable
+    override init() {
         super.init()
         buildMenu()
-        setState(.stopped)
     }
 
-    func setSpeechEngine(_ engine: SpeechEngine) {
-        settings.speechEngine = engine
-        engineItems.forEach {
-            $0.state = $0.representedObject as? String == engine.rawValue ? .on : .off
+    // MARK: - Vẽ lại theo state
+
+    func render(_ state: AppViewState) {
+        renderRunState(state.runState)
+        renderVoices(state.voices, selectedIdentifier: state.selectedVoiceIdentifier)
+
+        for item in engineItems {
+            guard let raw = item.representedObject as? String,
+                  let engine = SpeechEngine(rawValue: raw)
+            else { continue }
+            item.state = engine == state.settings.speechEngine ? .on : .off
+            item.isEnabled = engine != .kokoro || state.kokoroAvailable
         }
-    }
-
-    func setVoiceOptions(_ voices: [SpeechVoiceOption], selectedIdentifier: String?) {
-        self.voices = voices
-        voiceItems.removeAll()
-        voiceMenu.removeAllItems()
-
-        guard !voices.isEmpty else {
-            let unavailable = NSMenuItem(
-                title: "Không có giọng khả dụng",
-                action: nil,
-                keyEquivalent: ""
-            )
-            unavailable.isEnabled = false
-            voiceMenu.addItem(unavailable)
-            return
+        for (index, rate) in Settings.ratePresets.enumerated() {
+            rateItems[index].state = abs(rate - state.settings.speechRate) < 0.001 ? .on : .off
         }
-
-        for voice in voices {
-            let item = NSMenuItem(
-                title: voice.name,
-                action: #selector(voiceClicked(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = voice.identifier
-            item.state = voice.identifier == selectedIdentifier ? .on : .off
-            voiceMenu.addItem(item)
-            voiceItems.append(item)
+        for (index, volume) in Settings.volumePresets.enumerated() {
+            volumeItems[index].state = abs(volume - state.settings.volume) < 0.001 ? .on : .off
         }
+        launchAtLoginItem.state = state.launchAtLoginEnabled ? .on : .off
     }
 
-    nonisolated func menuWillOpen(_ menu: NSMenu) {
-        MainActor.assumeIsolated { onMenuWillOpen?() }
-    }
-
-    // MARK: - Trạng thái
-
-    func setState(_ state: State) {
-        switch state {
+    private func renderRunState(_ runState: AppRunState) {
+        switch runState {
         case .stopped:
             setSymbol("speaker.slash", description: "SubVoice đang tắt")
             toggleItem.title = "Bật đọc"
@@ -106,11 +69,53 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             setSymbol("waveform.circle.fill", description: "SubVoice đang đọc")
             toggleItem.title = "Tắt đọc"
             warningItem.isHidden = true
-        case .warning(let message):
-            setSymbol("exclamationmark.triangle.fill", description: message)
+        case .warning(let warning):
+            setSymbol("exclamationmark.triangle.fill", description: warning.message)
             toggleItem.title = "Bật đọc"
-            warningItem.title = message
+            warningItem.title = warning.message
+            warningItem.representedObject = warning.recovery.map(RecoveryBox.init)
             warningItem.isHidden = false
+        }
+    }
+
+    /// `RecoveryAction` là enum Swift thuần nên không đặt thẳng vào
+    /// `representedObject` (vốn cần AnyObject) được.
+    private final class RecoveryBox: NSObject {
+        let action: RecoveryAction
+        init(_ action: RecoveryAction) { self.action = action }
+    }
+
+    private func renderVoices(_ voices: [SpeechVoiceOption], selectedIdentifier: String?) {
+        if voices != renderedVoices {
+            renderedVoices = voices
+            voiceItems.removeAll()
+            voiceMenu.removeAllItems()
+
+            guard !voices.isEmpty else {
+                let unavailable = NSMenuItem(
+                    title: "Không có giọng khả dụng",
+                    action: nil,
+                    keyEquivalent: ""
+                )
+                unavailable.isEnabled = false
+                voiceMenu.addItem(unavailable)
+                return
+            }
+
+            for voice in voices {
+                let item = NSMenuItem(
+                    title: voice.name,
+                    action: #selector(voiceClicked(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = voice.identifier
+                voiceMenu.addItem(item)
+                voiceItems.append(item)
+            }
+        }
+        for item in voiceItems {
+            item.state = item.representedObject as? String == selectedIdentifier ? .on : .off
         }
     }
 
@@ -122,13 +127,25 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         statusItem.button?.toolTip = description
     }
 
+    nonisolated func menuWillOpen(_ menu: NSMenu) {
+        MainActor.assumeIsolated { onMenuWillOpen?() }
+    }
+
     // MARK: - Dựng menu
 
     private func buildMenu() {
-        warningItem.action = #selector(warningClicked)
+        warningItem.action = #selector(warningClicked(_:))
         warningItem.target = self
         warningItem.isHidden = true
         menu.addItem(warningItem)
+
+        let openWindow = NSMenuItem(
+            title: "Mở SubVoice",
+            action: #selector(openWindowClicked),
+            keyEquivalent: ""
+        )
+        openWindow.target = self
+        menu.addItem(openWindow)
 
         toggleItem.title = "Bật đọc"
         toggleItem.action = #selector(toggleClicked)
@@ -161,8 +178,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             )
             item.target = self
             item.representedObject = engine.rawValue
-            item.state = engine == settings.speechEngine ? .on : .off
-            item.isEnabled = engine != .kokoro || kokoroAvailable
             engineMenu.addItem(item)
             engineItems.append(item)
         }
@@ -170,16 +185,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         engineRoot.submenu = engineMenu
         menu.addItem(engineRoot)
 
-        let selectedVoice = settings.speechEngine == .kokoro
-            ? settings.kokoroVoiceIdentifier : settings.speechVoiceIdentifier
-        setVoiceOptions(voices, selectedIdentifier: selectedVoice)
         let voiceRoot = NSMenuItem(title: "Giọng đọc", action: nil, keyEquivalent: "")
         voiceRoot.submenu = voiceMenu
         menu.addItem(voiceRoot)
 
         let rateMenu = NSMenu()
         let rateLabels = ["Rất chậm", "Chậm", "Vừa", "Nhanh", "Rất nhanh"]
-        for (index, rate) in Settings.ratePresets.enumerated() {
+        for (index, _) in Settings.ratePresets.enumerated() {
             let item = NSMenuItem(
                 title: rateLabels[index],
                 action: #selector(rateClicked(_:)),
@@ -187,7 +199,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             )
             item.target = self
             item.tag = index
-            item.state = abs(rate - settings.speechRate) < 0.001 ? .on : .off
             rateMenu.addItem(item)
             rateItems.append(item)
         }
@@ -204,7 +215,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             )
             item.target = self
             item.tag = index
-            item.state = abs(volume - settings.volume) < 0.001 ? .on : .off
             volumeMenu.addItem(item)
             volumeItems.append(item)
         }
@@ -217,10 +227,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         launchAtLoginItem.title = "Khởi động cùng máy"
         launchAtLoginItem.action = #selector(launchAtLoginClicked)
         launchAtLoginItem.target = self
-        launchAtLoginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(launchAtLoginItem)
 
-        let quit = NSMenuItem(title: "Thoát SubVoice", action: #selector(quitClicked), keyEquivalent: "q")
+        let quit = NSMenuItem(
+            title: "Thoát SubVoice",
+            action: #selector(quitClicked),
+            keyEquivalent: "q"
+        )
         quit.target = self
         menu.addItem(quit)
 
@@ -230,55 +243,37 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     // MARK: - Hành động
 
-    @objc private func toggleClicked() { onToggle?() }
-    @objc private func reselectClicked() { onReselect?() }
-    @objc private func warningClicked() { onWarningClicked?() }
-    @objc private func quitClicked() { onQuit?() }
+    @objc private func toggleClicked() { onIntent?(.toggleCapture) }
+    @objc private func reselectClicked() { onIntent?(.selectRegion) }
+    @objc private func quitClicked() { onIntent?(.quit) }
+    @objc private func openWindowClicked() { onOpenWindow?() }
+
+    @objc private func warningClicked(_ sender: NSMenuItem) {
+        let recovery = (sender.representedObject as? RecoveryBox)?.action ?? .retry
+        onIntent?(.recover(recovery))
+    }
 
     @objc private func engineClicked(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String,
               let engine = SpeechEngine(rawValue: raw)
         else { return }
-        setSpeechEngine(engine)
-        onEngineChange?(engine)
+        onIntent?(.changeEngine(engine))
     }
 
     @objc private func voiceClicked(_ sender: NSMenuItem) {
         guard let identifier = sender.representedObject as? String else { return }
-        if settings.speechEngine == .kokoro {
-            settings.kokoroVoiceIdentifier = identifier
-        } else {
-            settings.speechVoiceIdentifier = identifier
-        }
-        voiceItems.forEach { $0.state = $0.representedObject as? String == identifier ? .on : .off }
-        onVoiceChange?(identifier)
+        onIntent?(.changeVoice(identifier))
     }
 
     @objc private func rateClicked(_ sender: NSMenuItem) {
-        let rate = Settings.ratePresets[sender.tag]
-        settings.speechRate = rate
-        rateItems.enumerated().forEach { $0.element.state = $0.offset == sender.tag ? .on : .off }
-        onRateChange?(rate)
+        onIntent?(.changeRate(Settings.ratePresets[sender.tag]))
     }
 
     @objc private func volumeClicked(_ sender: NSMenuItem) {
-        let volume = Settings.volumePresets[sender.tag]
-        settings.volume = volume
-        volumeItems.enumerated().forEach { $0.element.state = $0.offset == sender.tag ? .on : .off }
-        onVolumeChange?(volume)
+        onIntent?(.changeVolume(Settings.volumePresets[sender.tag]))
     }
 
     @objc private func launchAtLoginClicked() {
-        do {
-            if SMAppService.mainApp.status == .enabled {
-                try SMAppService.mainApp.unregister()
-                launchAtLoginItem.state = .off
-            } else {
-                try SMAppService.mainApp.register()
-                launchAtLoginItem.state = .on
-            }
-        } catch {
-            NSLog("Không đổi được cài đặt khởi động cùng máy: \(error.localizedDescription)")
-        }
+        onIntent?(.setLaunchAtLogin(launchAtLoginItem.state != .on))
     }
 }

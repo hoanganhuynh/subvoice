@@ -1,7 +1,9 @@
 import AppKit
 import CoreVideo
 import Foundation
+import ServiceManagement
 import SubVoiceCore
+import SubVoiceUI
 
 /// Trạng thái chỉ thuộc về hàng đợi bắt màn hình.
 ///
@@ -56,6 +58,9 @@ final class AppCoordinator {
     private let regionSelector = RegionSelector()
     private let hotKeys = HotKeyManager()
     private var menuBar: MenuBarController!
+
+    /// Nguồn trạng thái duy nhất mà cửa sổ chính và menu bar cùng đọc.
+    let viewModel = AppViewModel(state: AppViewState())
 
     // Chạm từ hàng đợi bắt màn hình, nên không thể mang isolation của MainActor.
     // OCREngine tự khoá bên trong; CaptureQueueState chỉ có đúng một luồng dùng.
@@ -112,11 +117,8 @@ final class AppCoordinator {
             settings.speechEngine = .system
         }
         Store.saveSettings(settings)
-        menuBar = MenuBarController(
-            settings: settings,
-            voices: voicesForCurrentEngine(),
-            kokoroAvailable: kokoroSpeech.isAvailable
-        )
+        menuBar = MenuBarController()
+        viewModel.onIntent = { [weak self] intent in self?.handle(intent) }
         wireMenuBar()
         wirePipeline()
 
@@ -136,11 +138,7 @@ final class AppCoordinator {
             return
         }
 
-        if settings.speechEngine == .system && !systemSpeech.hasVietnameseVoice {
-            menuBar.setState(.warning("Thiếu giọng tiếng Việt — bấm để xem hướng dẫn"))
-        } else if !PermissionHelper.hasScreenRecordingAccess {
-            menuBar.setState(.warning("Cần quyền Screen Recording — bấm để mở cài đặt"))
-        }
+        refreshIdleState()
     }
 
     /// Chạy trọn một chu trình chọn vùng rồi thoát, để `Scripts/smoke-overlay.sh`
@@ -161,48 +159,147 @@ final class AppCoordinator {
     // MARK: - Nối dây
 
     private func wireMenuBar() {
-        menuBar.onToggle = { [weak self] in self?.toggle() }
-        menuBar.onReselect = { [weak self] in self?.reselectRegion() }
-        menuBar.onEngineChange = { [weak self] engine in
-            self?.switchSpeechEngine(to: engine)
-        }
-        menuBar.onVoiceChange = { [weak self] identifier in
-            guard let self else { return }
-            // Utterance đang đọc đã giữ voice riêng; lựa chọn mới sẽ có hiệu
-            // lực ở câu kế tiếp, không làm đứt câu hiện tại.
-            if self.settings.speechEngine == .kokoro {
-                self.settings.kokoroVoiceIdentifier = self.kokoroSpeech.selectVoice(
-                    identifier: identifier
-                )
-            } else {
-                self.settings.speechVoiceIdentifier = self.systemSpeech.selectVoice(
-                    identifier: identifier
-                )
-            }
-            Store.saveSettings(self.settings)
-        }
-        menuBar.onRateChange = { [weak self] rate in
-            guard let self else { return }
-            self.settings.speechRate = rate
-            Store.saveSettings(self.settings)
-        }
-        menuBar.onVolumeChange = { [weak self] volume in
-            guard let self else { return }
-            self.settings.volume = volume
-            Store.saveSettings(self.settings)
-        }
-        menuBar.onWarningClicked = { [weak self] in
-            guard let self else { return }
-            if self.settings.speechEngine == .system && !self.systemSpeech.hasVietnameseVoice {
-                NSWorkspace.shared.open(URL(
-                    string: "x-apple.systempreferences:com.apple.preference.universalaccess?SpeakableItems"
-                )!)
-            } else {
-                PermissionHelper.openScreenRecordingSettings()
-            }
-        }
+        menuBar.onIntent = { [weak self] intent in self?.handle(intent) }
         menuBar.onMenuWillOpen = { [weak self] in self?.refreshIdleState() }
-        menuBar.onQuit = { NSApp.terminate(nil) }
+    }
+
+    // MARK: - Ảnh chụp trạng thái
+
+    private func regionSummary() -> RegionSummary? {
+        region.map {
+            RegionSummary(
+                displayID: $0.displayID,
+                pixelWidth: $0.pixelWidth,
+                pixelHeight: $0.pixelHeight
+            )
+        }
+    }
+
+    /// Dựng lại toàn bộ ảnh chụp trạng thái rồi đẩy cho cả cửa sổ và menu bar,
+    /// để hai nơi không thể hiển thị lệch nhau.
+    private func publishSnapshot(runState: AppRunState? = nil) {
+        viewModel.apply { state in
+            if let runState { state.runState = runState }
+            state.settings = settings
+            state.voices = voicesForCurrentEngine()
+            state.region = regionSummary()
+            state.screenRecordingGranted = PermissionHelper.hasScreenRecordingAccess
+            state.systemVoiceStatus = systemSpeech.hasVietnameseVoice
+                ? .ready("Giọng tiếng Việt đã sẵn sàng")
+                : .unavailable("Thiếu giọng tiếng Việt")
+            state.kokoroAvailable = kokoroSpeech.isAvailable
+            state.kokoroStatus = kokoroSpeech.isAvailable
+                ? .ready("Kokoro đã sẵn sàng")
+                : .unavailable(kokoroSpeech.unavailableReason ?? "Chưa cài Kokoro")
+            state.launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
+        }
+        menuBar?.render(viewModel.state)
+    }
+
+    // MARK: - Xử lý lệnh
+
+    private func handle(_ intent: AppIntent) {
+        switch intent {
+        case .toggleCapture:
+            toggle()
+        case .selectRegion:
+            reselectRegion()
+        case .changeEngine(let engine):
+            switchSpeechEngine(to: engine)
+        case .changeVoice(let identifier):
+            changeVoice(to: identifier)
+        case .changeRate(let rate):
+            settings.speechRate = rate
+            Store.saveSettings(settings)
+            publishSnapshot()
+        case .changeVolume(let volume):
+            settings.volume = volume
+            Store.saveSettings(settings)
+            publishSnapshot()
+        case .previewVoice:
+            previewVoice()
+        case .clearTranscript:
+            viewModel.apply { $0.transcript.clear() }
+            menuBar.render(viewModel.state)
+        case .copyTranscript(let identifiers):
+            copyTranscript(identifiers)
+        case .setTheme(let theme):
+            settings.themeMode = theme
+            Store.saveSettings(settings)
+            publishSnapshot()
+        case .setLaunchAtLogin(let enabled):
+            setLaunchAtLogin(enabled)
+        case .recover(let action):
+            recover(action)
+        case .showMainWindow:
+            break   // cửa sổ chính được nối ở bước sau
+        case .quit:
+            NSApp.terminate(nil)
+        }
+    }
+
+    private func changeVoice(to identifier: String) {
+        // Utterance đang đọc đã giữ voice riêng; lựa chọn mới sẽ có hiệu lực ở
+        // câu kế tiếp, không làm đứt câu hiện tại.
+        if settings.speechEngine == .kokoro {
+            settings.kokoroVoiceIdentifier = kokoroSpeech.selectVoice(identifier: identifier)
+        } else {
+            settings.speechVoiceIdentifier = systemSpeech.selectVoice(identifier: identifier)
+        }
+        Store.saveSettings(settings)
+        publishSnapshot()
+    }
+
+    /// Chỉ cho thử giọng lúc đang dừng, để không cắt ngang câu phụ đề đang đọc.
+    private func previewVoice() {
+        guard !isRunning else { return }
+        speech.speak(
+            "Xin chào, đây là giọng đọc của SubVoice.",
+            rate: settings.speechRate,
+            volume: settings.volume
+        )
+    }
+
+    /// Giữ nguyên thứ tự đang hiển thị mà giao diện gửi xuống.
+    private func copyTranscript(_ identifiers: [UUID]) {
+        let textByID = Dictionary(
+            viewModel.state.transcript.entries.map { ($0.id, $0.text) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let joined = identifiers.compactMap { textByID[$0] }.joined(separator: "\n")
+        guard !joined.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(joined, forType: .string)
+    }
+
+    private func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            publishSnapshot()
+        } catch {
+            NSLog("Không đổi được cài đặt khởi động cùng máy: \(error.localizedDescription)")
+            publishSnapshot(runState: .warning(AppWarning(
+                message: "Không đổi được cài đặt khởi động cùng máy",
+                recovery: .retry
+            )))
+        }
+    }
+
+    private func recover(_ action: RecoveryAction) {
+        switch action {
+        case .openScreenRecordingSettings:
+            PermissionHelper.openScreenRecordingSettings()
+        case .openSpokenContentSettings:
+            NSWorkspace.shared.open(URL(
+                string: "x-apple.systempreferences:com.apple.preference.universalaccess?SpeakableItems"
+            )!)
+        case .retry:
+            refreshIdleState()
+        }
     }
 
     /// Quyền Screen Recording chỉ có hiệu lực sau khi app khởi động lại, và
@@ -210,13 +307,24 @@ final class AppCoordinator {
     /// menu để không hiện cảnh báo đã cũ.
     private func refreshIdleState() {
         guard !isRunning else { return }
+        publishSnapshot(runState: idleWarning().map(AppRunState.warning) ?? .stopped)
+    }
+
+    /// Cảnh báo đáng hiện khi app đang dừng, kèm cách người dùng tự gỡ.
+    private func idleWarning() -> AppWarning? {
         if settings.speechEngine == .system && !systemSpeech.hasVietnameseVoice {
-            menuBar.setState(.warning("Thiếu giọng tiếng Việt — bấm để xem hướng dẫn"))
-        } else if !PermissionHelper.hasScreenRecordingAccess {
-            menuBar.setState(.warning("Cần quyền Screen Recording — bấm để mở cài đặt"))
-        } else {
-            menuBar.setState(.stopped)
+            return AppWarning(
+                message: "Thiếu giọng tiếng Việt — mở Spoken Content để tải về",
+                recovery: .openSpokenContentSettings
+            )
         }
+        if !PermissionHelper.hasScreenRecordingAccess {
+            return AppWarning(
+                message: "Cần quyền Screen Recording — mở System Settings để cấp",
+                recovery: .openScreenRecordingSettings
+            )
+        }
+        return nil
     }
 
     private func wirePipeline() {
@@ -224,7 +332,9 @@ final class AppCoordinator {
         capturer.onFatalError = { [weak self] message in
             guard let self else { return }
             self.stop()
-            self.menuBar.setState(.warning(message))
+            self.publishSnapshot(runState: .warning(
+                AppWarning(message: message, recovery: .retry)
+            ))
         }
         ocr.onText = { [weak self] text in
             Task { @MainActor in self?.handleText(text) }
@@ -251,8 +361,10 @@ final class AppCoordinator {
     private func switchSpeechEngine(to engine: SpeechEngine) {
         guard engine != settings.speechEngine else { return }
         if engine == .kokoro && !kokoroSpeech.isAvailable {
-            menuBar.setSpeechEngine(.system)
-            menuBar.setState(.warning(kokoroSpeech.unavailableReason ?? "Chưa cài Kokoro"))
+            publishSnapshot(runState: .warning(AppWarning(
+                message: kokoroSpeech.unavailableReason ?? "Chưa cài Kokoro",
+                recovery: nil
+            )))
             return
         }
 
@@ -260,14 +372,8 @@ final class AppCoordinator {
         speech.stop()
         settings.speechEngine = engine
         Store.saveSettings(settings)
-        menuBar.setSpeechEngine(engine)
-        menuBar.setVoiceOptions(
-            voicesForCurrentEngine(),
-            selectedIdentifier: engine == .kokoro
-                ? settings.kokoroVoiceIdentifier : settings.speechVoiceIdentifier
-        )
         speech.warmUp()
-        if isRunning { menuBar.setState(.listening) } else { refreshIdleState() }
+        if isRunning { publishSnapshot(runState: .listening) } else { refreshIdleState() }
     }
 
     private func fallbackFromKokoro(_ message: String) {
@@ -276,12 +382,10 @@ final class AppCoordinator {
         kokoroSpeech.stop()
         settings.speechEngine = .system
         Store.saveSettings(settings)
-        menuBar.setSpeechEngine(.system)
-        menuBar.setVoiceOptions(
-            systemSpeech.availableVietnameseVoices,
-            selectedIdentifier: settings.speechVoiceIdentifier
-        )
-        menuBar.setState(.warning("Kokoro lỗi — đã chuyển về giọng hệ thống"))
+        publishSnapshot(runState: .warning(AppWarning(
+            message: "Kokoro lỗi — đã chuyển về giọng hệ thống",
+            recovery: .retry
+        )))
     }
 
     // MARK: - Máy trạng thái
@@ -293,7 +397,10 @@ final class AppCoordinator {
     private func startCapturing() {
         guard PermissionHelper.hasScreenRecordingAccess else {
             PermissionHelper.requestScreenRecordingAccess()
-            menuBar.setState(.warning("Cần quyền Screen Recording — bấm để mở cài đặt"))
+            publishSnapshot(runState: .warning(AppWarning(
+                message: "Cần quyền Screen Recording — mở System Settings để cấp",
+                recovery: .openScreenRecordingSettings
+            )))
             return
         }
         guard let region else {
@@ -305,7 +412,7 @@ final class AppCoordinator {
         gate.clear()
         speechQueue.reset()
         isRunning = true
-        menuBar.setState(.listening)
+        publishSnapshot(runState: .listening)
 
         Task { [weak self] in
             guard let self else { return }
@@ -313,7 +420,10 @@ final class AppCoordinator {
                 try await self.capturer.start(region: region)
             } catch {
                 self.isRunning = false
-                self.menuBar.setState(.warning(error.localizedDescription))
+                self.publishSnapshot(runState: .warning(AppWarning(
+                    message: error.localizedDescription,
+                    recovery: .retry
+                )))
             }
         }
     }
@@ -325,7 +435,7 @@ final class AppCoordinator {
         speech.stop()
         speechQueue.reset()
         gate.clear()
-        menuBar.setState(.stopped)
+        publishSnapshot(runState: .stopped)
         reportLatenciesIfMeasuring()
     }
 
@@ -417,6 +527,9 @@ final class AppCoordinator {
         }
         if tracing { TraceLog.shared.write("  gate=DOC  \"\(sentence)\"") }
 
+        viewModel.apply { $0.transcript.append(text: sentence) }
+        menuBar.render(viewModel.state)
+
         let immediate = speechQueue.enqueue(sentence)
         if tracing {
             TraceLog.shared.write(
@@ -428,7 +541,7 @@ final class AppCoordinator {
     }
 
     private func handleSpeechStarted() {
-        menuBar.setState(isRunning ? .speaking : .stopped)
+        publishSnapshot(runState: isRunning ? .speaking : .stopped)
 
         guard measuringLatency else { return }
         latencyLock.lock()
@@ -445,7 +558,7 @@ final class AppCoordinator {
 
     private func handleSpeechFinished() {
         guard let next = speechQueue.finished() else {
-            if isRunning { menuBar.setState(.listening) }
+            if isRunning { publishSnapshot(runState: .listening) }
             return
         }
         speech.speak(next, rate: settings.speechRate, volume: settings.volume)
