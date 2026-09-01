@@ -14,6 +14,28 @@ struct FocusDashboardView: View {
 
     private var content: DashboardContent { DashboardContent(runState: state.runState) }
 
+    @ViewBuilder
+    private func hero(orbSize: CGFloat) -> some View {
+        VStack(spacing: AuroraTheme.spacingMedium) {
+            StatusOrbView(runState: state.runState, size: orbSize)
+            HeroCopyView(content: content)
+            PrimaryCaptureButton(
+                title: content.primaryActionTitle,
+                isCapturing: state.isCapturing
+            ) {
+                viewModel.send(.toggleCapture)
+            }
+            if let recoveryTitle = content.recoveryTitle,
+               let recoveryAction = content.recoveryAction {
+                Button(recoveryTitle) {
+                    viewModel.send(.recover(recoveryAction))
+                }
+                .buttonStyle(.link)
+                .foregroundStyle(theme.accentSoft)
+            }
+        }
+    }
+
     var body: some View {
         ZStack {
             AuroraBackground()
@@ -23,22 +45,12 @@ struct FocusDashboardView: View {
 
                 Spacer(minLength: AuroraTheme.spacingXSmall)
 
-                StatusOrbView(runState: state.runState)
-                HeroCopyView(content: content)
-                PrimaryCaptureButton(
-                    title: content.primaryActionTitle,
-                    isCapturing: state.isCapturing
-                ) {
-                    viewModel.send(.toggleCapture)
-                }
-
-                if let recoveryTitle = content.recoveryTitle,
-                   let recoveryAction = content.recoveryAction {
-                    Button(recoveryTitle) {
-                        viewModel.send(.recover(recoveryAction))
-                    }
-                    .buttonStyle(.link)
-                    .foregroundStyle(theme.accentSoft)
+                // Cửa sổ co xuống tới 540 điểm chiều cao, nên orb phải nhỏ lại
+                // thay vì để cả cụm trung tâm bị cắt mất.
+                ViewThatFits(in: .vertical) {
+                    hero(orbSize: 176)
+                    hero(orbSize: 128)
+                    hero(orbSize: 96)
                 }
 
                 Spacer(minLength: AuroraTheme.spacingXSmall)

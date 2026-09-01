@@ -9,7 +9,9 @@
 [![Offline](https://img.shields.io/badge/xử_lý-100%25_offline-2ea44f)](#quyền-riêng-tư)
 [![Swift Testing](https://img.shields.io/badge/tests-Swift_Testing-6f42c1)](#kiểm-thử)
 
-Chọn một vùng phụ đề trên màn hình. SubVoice nhận diện chữ tiếng Việt, lọc câu trùng và đọc thành tiếng ngay từ menu bar.
+Chọn một vùng phụ đề trên màn hình. SubVoice nhận diện chữ tiếng Việt, lọc câu trùng và đọc thành tiếng — điều khiển từ cửa sổ chính hoặc từ menu bar.
+
+<img src="Resources/Screenshots/main-window.png" alt="Cửa sổ chính của SubVoice ở chế độ tối" width="820">
 
 </div>
 
@@ -17,12 +19,16 @@ Chọn một vùng phụ đề trên màn hình. SubVoice nhận diện chữ ti
 
 ## Điểm nổi bật
 
-- **Chạy gọn trên menu bar** — không chiếm Dock, không cần cửa sổ chính.
+- **Cửa sổ chính Focus First** — trạng thái, nút bật/tắt và ba thẻ điều khiển trong một màn hình.
+- **Menu bar vẫn còn nguyên** cho thao tác nhanh khi cửa sổ đã đóng.
 - **OCR tiếng Việt có dấu** bằng Vision, được hâm nóng để giảm độ trễ câu đầu.
 - **Hai bộ đọc offline:** giọng hệ thống nhanh và Kokoro tự nhiên với 14 giọng Việt.
+- **Voice Studio** — đổi bộ đọc, giọng, tốc độ, âm lượng và thử giọng ngay tại chỗ.
+- **Lịch sử chỉ trong phiên** — tìm kiếm, sao chép, tự xoá khi thoát app.
+- **Chẩn đoán tại chỗ** cho quyền Screen Recording, giọng hệ thống và Kokoro.
 - **Không đọc lặp** khi phụ đề đứng yên; xử lý được phụ đề xuất hiện kiểu fade-in.
 - **Không bỏ câu đã nhận diện** — hàng đợi FIFO giữ đúng thứ tự hội thoại.
-- **Điều chỉnh được** giọng, tốc độ và âm lượng ngay trong menu.
+- **Giao diện System, Light hoặc Dark**, theo phím tắt và VoiceOver.
 - **Phím tắt toàn cục** hoạt động cả khi trình duyệt hoặc video đang toàn màn hình.
 - **Không gửi ảnh hay nội dung phụ đề ra mạng.**
 
@@ -70,10 +76,18 @@ Sau khi cấp quyền, hãy thoát rồi mở lại SubVoice.
 
 ## Sử dụng
 
-1. Mở biểu tượng SubVoice trên menu bar.
-2. Chọn **Chọn lại vùng…**, rồi kéo quanh khu vực hiển thị phụ đề.
-3. Chọn **Bật đọc**.
-4. Chọn bộ đọc, giọng, tốc độ và âm lượng phù hợp.
+1. Mở SubVoice. Cửa sổ chính hiện ra ở trạng thái dừng — app không bao giờ tự đọc khi vừa khởi động.
+2. Bấm thẻ **Vùng đọc**, rồi kéo quanh khu vực hiển thị phụ đề.
+3. Bấm **Bắt đầu đọc**.
+4. Bấm thẻ **Giọng đọc** để mở Voice Studio và chỉnh bộ đọc, giọng, tốc độ, âm lượng.
+5. Bấm thẻ **Vừa đọc** để tìm và sao chép những câu đã đọc trong phiên.
+
+Đóng cửa sổ không làm SubVoice dừng lại: app tiếp tục chạy trên menu bar và pipeline
+đang đọc không bị ngắt. Bấm Dock icon hoặc **Mở SubVoice** trên menu bar để hiện lại
+cửa sổ; chỉ <kbd>⌘</kbd> + <kbd>Q</kbd> mới thoát hẳn.
+
+Menu bar giữ đủ các điều khiển nhanh — bật/tắt đọc, chọn lại vùng, đổi bộ đọc, giọng,
+tốc độ, âm lượng và khởi động cùng máy — để bạn không phải rời khỏi video đang xem.
 
 ### Phím tắt
 
@@ -138,27 +152,36 @@ Toàn bộ pipeline chạy trên máy:
 - ScreenCaptureKit chỉ lấy vùng bạn đã chọn.
 - Vision thực hiện OCR cục bộ.
 - Linh và Kokoro đều tạo giọng offline.
+- Lịch sử phiên chỉ nằm trong bộ nhớ tiến trình, tối đa 200 câu, và biến mất khi bạn thoát app. Nó không được ghi vào `UserDefaults` hay bất kỳ file log nào.
 - SubVoice không có API phân tích, quảng cáo hoặc đồng bộ đám mây.
 
 ## Kiến trúc dự án
 
 ```text
 Sources/
-├── SubVoiceApp/      # Menu bar, capture, OCR, TTS và điều phối
-├── SubVoiceCore/     # Detector, lọc văn bản, hàng đợi và cài đặt
+├── SubVoiceApp/      # Vòng đời AppKit: cửa sổ, menu bar, capture, OCR, TTS
+├── SubVoiceUI/       # State trình bày và toàn bộ view SwiftUI
+├── SubVoiceCore/     # Detector, lọc văn bản, hàng đợi, lịch sử và cài đặt
 └── SubVoiceProbe/    # Công cụ đo OCR/capture
 
 Resources/
-└── kokoro_service.py # Sidecar JSON-lines thường trú
+├── kokoro_service.py # Sidecar JSON-lines thường trú
+└── Screenshots/      # Ảnh dùng trong tài liệu
 
 Scripts/
 ├── bundle.sh         # Build, ký và cài SubVoice.app
 ├── smoke-overlay.sh  # Kiểm tra vòng đời overlay
+├── smoke-window.sh   # Kiểm tra vòng đời cửa sổ chính
 └── trace.sh          # Đọc trace chẩn đoán
 
 Tests/
-└── SubVoiceCoreTests/
+├── SubVoiceCoreTests/
+└── SubVoiceUITests/
 ```
+
+`AppCoordinator` sở hữu mọi dịch vụ đang chạy và là nơi duy nhất tạo ra ảnh chụp
+trạng thái. Cửa sổ SwiftUI và menu bar cùng đọc một ảnh chụp đó và chỉ gửi lệnh
+ngược lại, nên hai nơi không thể hiển thị lệch nhau.
 
 ## Kiểm thử
 
@@ -172,6 +195,12 @@ Kiểm tra overlay chọn vùng dưới NSZombie:
 
 ```bash
 ./Scripts/smoke-overlay.sh
+```
+
+Kiểm tra vòng đời cửa sổ chính:
+
+```bash
+./Scripts/smoke-window.sh
 ```
 
 Bật trace khi cần tìm câu bị bỏ qua:

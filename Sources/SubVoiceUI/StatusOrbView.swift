@@ -7,6 +7,7 @@ import SwiftUI
 struct StatusOrbView: View {
 
     let runState: AppRunState
+    var size: CGFloat = 176
 
     @Environment(\.aurora) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -45,11 +46,11 @@ struct StatusOrbView: View {
                     RadialGradient(
                         colors: [tint.opacity(0.45), tint.opacity(0.0)],
                         center: .center,
-                        startRadius: 8,
-                        endRadius: 96
+                        startRadius: size * 0.05,
+                        endRadius: size * 0.5
                     )
                 )
-                .frame(width: 192, height: 192)
+                .frame(width: size, height: size)
                 .scaleEffect(isPulsing ? 1.06 : 1.0)
 
             Circle()
@@ -60,11 +61,11 @@ struct StatusOrbView: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                .frame(width: 112, height: 112)
+                .frame(width: size * 0.58, height: size * 0.58)
                 .overlay(Circle().strokeBorder(theme.separator, lineWidth: 1))
 
             Image(systemName: content.symbolName)
-                .font(.system(size: 44, weight: .medium))
+                .font(.system(size: size * 0.23, weight: .medium))
                 .foregroundStyle(.white)
         }
         .accessibilityElement(children: .ignore)

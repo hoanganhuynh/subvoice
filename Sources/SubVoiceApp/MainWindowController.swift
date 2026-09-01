@@ -17,8 +17,12 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     init(viewModel: AppViewModel) {
         let root = SubVoiceRootView(viewModel: viewModel)
         let host = NSHostingController(rootView: root)
+        // Mặc định NSHostingController ép cửa sổ co giãn theo kích thước lý
+        // tưởng của SwiftUI, làm cửa sổ mở ra cao gấp ba lần thiết kế. Cửa sổ
+        // tự quyết kích thước của nó.
+        host.sizingOptions = []
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 820, height: 620),
+            contentRect: NSRect(x: 0, y: 0, width: 820, height: 700),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -28,9 +32,17 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         window.contentMinSize = NSSize(width: 720, height: 540)
         window.contentViewController = host
         window.title = "SubVoice"
+        // Thanh tiêu đề trong suốt để nền aurora chảy hết khung; nếu không,
+        // `fullSizeContentView` sẽ vẽ thanh tiêu đề ĐÈ lên top bar.
+        window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
-        window.setFrameAutosaveName("SubVoice.MainWindow")
+        window.setContentSize(NSSize(width: 820, height: 700))
         window.center()
+        // Khôi phục vị trí người dùng đã kéo, nhưng chỉ SAU khi kích thước mặc
+        // định đã được đặt, để một frame cũ hỏng không khoá cửa sổ ở kích
+        // thước sai.
+        window.setFrameUsingName("SubVoice.MainWindow")
+        window.setFrameAutosaveName("SubVoice.MainWindow")
     }
 
     func show() {
