@@ -1,38 +1,74 @@
+import SubVoiceCore
 import SwiftUI
 
 /// Điểm vào của toàn bộ giao diện cửa sổ chính.
+///
+/// Bảng màu được giải ở đây một lần rồi truyền xuống qua environment, nên
+/// Light/Dark và Increase Contrast chỉ có đúng một chỗ quyết định.
 public struct SubVoiceRootView: View {
 
     @ObservedObject private var viewModel: AppViewModel
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @State private var route: SheetRoute?
 
-    public init(viewModel: AppViewModel) {
+    private let appVersion: String
+
+    public init(viewModel: AppViewModel, appVersion: String = SubVoiceRootView.bundleVersion) {
         self.viewModel = viewModel
+        self.appVersion = appVersion
+    }
+
+    public static var bundleVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+    }
+
+    private enum SheetRoute: String, Identifiable {
+        case voiceStudio, transcript, settings
+        var id: String { rawValue }
+    }
+
+    private var theme: AuroraTheme {
+        AuroraTheme.resolve(scheme: colorScheme, contrast: contrast)
     }
 
     public var body: some View {
-        VStack(spacing: 24) {
-            Text("SubVoice")
-                .font(.largeTitle.weight(.semibold))
-            Text(statusText)
-                .font(.title3)
-            Button(viewModel.state.isCapturing ? "Dừng đọc" : "Bắt đầu đọc") {
-                viewModel.send(.toggleCapture)
-            }
-            .keyboardShortcut("v", modifiers: [.command, .option])
-            Text("Made by Anthony with ⌨️")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+        FocusDashboardView(
+            state: viewModel.state,
+            viewModel: viewModel,
+            onOpenSettings: { route = .settings },
+            onOpenVoiceStudio: { route = .voiceStudio },
+            onOpenTranscript: { route = .transcript }
+        )
+        .environment(\.aurora, theme)
+        .sheet(item: $route) { route in
+            sheet(for: route)
+                .environment(\.aurora, theme)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(32)
     }
 
-    private var statusText: String {
-        switch viewModel.state.runState {
-        case .stopped: "Đang dừng"
-        case .listening: "Đang nghe"
-        case .speaking: "Đang đọc"
-        case .warning(let warning): warning.message
+    @ViewBuilder
+    private func sheet(for route: SheetRoute) -> some View {
+        switch route {
+        case .voiceStudio:
+            VoiceStudioView(
+                state: viewModel.state,
+                viewModel: viewModel,
+                onClose: { self.route = nil }
+            )
+        case .transcript:
+            TranscriptDrawerView(
+                state: viewModel.state,
+                viewModel: viewModel,
+                onClose: { self.route = nil }
+            )
+        case .settings:
+            SettingsView(
+                state: viewModel.state,
+                viewModel: viewModel,
+                appVersion: appVersion,
+                onClose: { self.route = nil }
+            )
         }
     }
 }
