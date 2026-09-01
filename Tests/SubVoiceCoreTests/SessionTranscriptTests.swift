@@ -28,4 +28,14 @@ struct SessionTranscriptTests {
         #expect(history.matching(" chào ").map(\.text) == ["Xin Chào"])
         #expect(history.matching("   ") == history.entries)
     }
+
+    @Test func clearRemovesFilteredAndUnfilteredEntries() {
+        var history = SessionTranscript()
+        history.append(text: "Một", at: .now)
+        history.append(text: "Hai", at: .now)
+        #expect(history.matching("hai").count == 1)
+        history.clear()
+        #expect(history.entries.isEmpty)
+        #expect(history.matching("hai").isEmpty)
+    }
 }
