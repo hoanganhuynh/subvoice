@@ -52,13 +52,18 @@ struct SettingsView: View {
                                 ? nil : "Mở Spoken Content",
                             action: { viewModel.send(.recover(.openSpokenContentSettings)) }
                         )
-                        DiagnosticRow(
-                            symbolName: "cpu",
-                            title: "Kokoro",
-                            status: state.kokoroStatus,
-                            actionTitle: nil,
-                            action: {}
-                        )
+                        VStack(alignment: .leading, spacing: AuroraTheme.spacingXSmall) {
+                            DiagnosticRow(
+                                symbolName: "cpu",
+                                title: "Kokoro",
+                                status: state.kokoroStatus,
+                                actionTitle: nil,
+                                action: {}
+                            )
+                            if !state.kokoroAvailable {
+                                KokoroInstallRow(state: state, viewModel: viewModel)
+                            }
+                        }
                     }
 
                     section("Giới thiệu") {
