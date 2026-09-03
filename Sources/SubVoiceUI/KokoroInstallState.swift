@@ -7,44 +7,61 @@ public enum KokoroInstallState: Equatable, Sendable {
     case downloading(received: Int64, total: Int64)
     case verifying
     case extracting
+    case finishing
     case installed(version: String)
     case failed(message: String)
 
     public var isBusy: Bool {
         switch self {
-        case .downloading, .verifying, .extracting: true
-        case .notInstalled, .installed, .failed: false
+        case .downloading, .verifying, .extracting, .finishing:
+            return true
+        case .notInstalled, .installed, .failed:
+            return false
         }
     }
 
-    /// `nil` khi không xác định được phần trăm — thanh tiến trình phải chạy ở
-    /// chế độ indeterminate chứ không đứng im ở 0%.
+    /// Phần trăm CHỈ có ý nghĩa khi `isBusy` đúng. Các trạng thái kết thúc cũng
+    /// trả `nil` dù chúng xác định rõ 0% hay 100%, nên đừng vẽ thanh tiến trình
+    /// mà không kiểm tra `isBusy` trước.
+    ///
+    /// `nil` lúc đang bận nghĩa là không đo được — thanh phải chạy indeterminate
+    /// chứ không đứng im ở 0%.
     public var progress: Double? {
+        // URLSession báo tổng chưa biết bằng -1, không phải 0.
         guard case .downloading(let received, let total) = self, total > 0 else {
             return nil
         }
-        return Double(received) / Double(total)
+        // Tải tiếp phần dở có thể cộng dồn quá tổng, và Content-Length qua
+        // redirect đôi khi báo thiếu.
+        return min(max(0, Double(received) / Double(total)), 1)
     }
 
     public var statusText: String {
         switch self {
         case .notInstalled:
-            "Chưa cài"
+            return "Chưa cài"
         case .downloading(let received, let total):
-            Self.byteProgressText(received: received, total: total)
+            return Self.byteProgressText(received: received, total: total)
         case .verifying:
-            "Đang kiểm tra gói tải về…"
+            return "Đang kiểm tra gói tải về…"
         case .extracting:
-            "Đang cài…"
+            return "Đang giải nén…"
+        case .finishing:
+            return "Đang hoàn tất…"
         case .installed(let version):
-            "Đã cài bản \(version)"
+            return "Đã cài bản \(version)"
         case .failed(let message):
-            message
+            // Lỗi mạng đến từ URLError với mô tả tiếng Anh của hệ thống, nên
+            // câu dẫn phải do kiểu này bảo đảm chứ không phó mặc chỗ gọi.
+            return "Cài Kokoro thất bại: \(message)"
         }
     }
 
     private static func byteProgressText(received: Int64, total: Int64) -> String {
         let formatter = ByteCountFormatter()
+        // Mặc định formatter trả "Zero KB" — tiếng Anh, trong giao diện thuần
+        // Việt, và đúng vào giây đầu tiên của mỗi lần tải.
+        formatter.allowsNonnumericFormatting = false
         guard total > 0 else {
             return "Đang tải \(formatter.string(fromByteCount: received))…"
         }
