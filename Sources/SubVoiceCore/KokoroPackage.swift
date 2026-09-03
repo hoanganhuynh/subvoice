@@ -248,3 +248,21 @@ extension KokoroPackage {
         }
     }
 }
+
+extension KokoroPackage {
+    /// Gói mà bản app này biết cách cài.
+    ///
+    /// Ba giá trị dưới đây đi liền nhau: đổi gói thì phải chạy lại
+    /// `Scripts/package-kokoro.sh`, dán `SHA256` và `SIZE` nó in ra vào đây, rồi
+    /// đẩy archive lên GitHub Release trùng tag. Sai SHA thì `install` từ chối
+    /// gói — hỏng theo hướng an toàn, nhưng người dùng sẽ không tài nào cài được.
+    public static let current = KokoroPackage(
+        version: "1.0.0",
+        downloadURL: URL(
+            string: "https://github.com/hoanganhuynh/subvoice/releases/download"
+                + "/kokoro-runtime-1.0.0/kokoro-runtime-1.0.0-arm64.tar.zst"
+        )!,
+        sha256: "3fe41bfb676b78270eae964546bdc17c17c9bc5d4219af9e0fff906ee0ffec5d",
+        downloadBytes: 713_391_114
+    )
+}

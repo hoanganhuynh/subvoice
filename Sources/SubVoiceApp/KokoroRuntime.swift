@@ -1,4 +1,5 @@
 import Foundation
+import SubVoiceCore
 
 struct KokoroRuntime {
     let root: URL
@@ -11,61 +12,39 @@ struct KokoroRuntime {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         fileManager: FileManager = .default
     ) throws -> KokoroRuntime {
-        var candidates: [URL] = []
+        var roots: [URL] = []
         if let configured = environment["KOKORO_ROOT"], !configured.isEmpty {
-            candidates.append(URL(fileURLWithPath: configured, isDirectory: true))
+            roots.append(URL(fileURLWithPath: configured, isDirectory: true))
         }
-
         if let applicationSupport = fileManager.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first {
-            candidates.append(
-                applicationSupport
-                    .appendingPathComponent("SubVoice", isDirectory: true)
-                    .appendingPathComponent("Kokoro", isDirectory: true)
-            )
+            roots.append(KokoroInstallLayout(applicationSupport: applicationSupport).root)
         }
 
-        // Cho phép chạy trực tiếp từ source tree khi phát triển. Bản .app đã
-        // đóng gói sẽ dùng thư mục Application Support ở trên.
-        candidates.append(
-            URL(fileURLWithPath: fileManager.currentDirectoryPath, isDirectory: true)
-                .appendingPathComponent("ThirdParty", isDirectory: true)
-                .appendingPathComponent("Kokoro-Vietnamese", isDirectory: true)
-        )
+        for root in roots {
+            let required = KokoroInstallLayout.requiredFiles(in: root)
+            guard required.allSatisfy({ fileManager.fileExists(atPath: $0.path) }) else {
+                continue
+            }
 
-        for root in candidates {
-            let python = root.appendingPathComponent(".venv/bin/python")
-            let bundledService = root.appendingPathComponent("kokoro_service.py")
-            let sourceService = URL(
-                fileURLWithPath: fileManager.currentDirectoryPath,
-                isDirectory: true
-            ).appendingPathComponent("Resources/kokoro_service.py")
-            let service = fileManager.fileExists(atPath: bundledService.path)
-                ? bundledService : sourceService
-            let models = root.appendingPathComponent("models", isDirectory: true)
-
-            let required = [
-                python.path,
-                service.path,
-                models.appendingPathComponent("kokoro_vi.onnx").path,
-                models.appendingPathComponent("config.json").path,
-                models.appendingPathComponent("voicepacks/diem_trinh.pt").path,
-            ]
-            guard required.allSatisfy(fileManager.fileExists(atPath:)) else { continue }
+            // Phiên bản lệch được coi như chưa cài, để bản cài kiểu cũ (thư mục
+            // .venv) và bản dở dang đều đi qua đúng một đường: mời tải lại.
+            let manifest = root.appendingPathComponent("manifest.json")
+            guard let data = fileManager.contents(atPath: manifest.path),
+                  let decoded = try? JSONDecoder().decode(KokoroManifest.self, from: data),
+                  decoded.version == KokoroPackage.current.version
+            else { continue }
 
             let output = fileManager.temporaryDirectory
                 .appendingPathComponent("SubVoice-Kokoro", isDirectory: true)
-            try fileManager.createDirectory(
-                at: output,
-                withIntermediateDirectories: true
-            )
+            try fileManager.createDirectory(at: output, withIntermediateDirectories: true)
             return KokoroRuntime(
                 root: root,
-                python: python,
-                service: service,
-                models: models,
+                python: root.appendingPathComponent("python/bin/python3"),
+                service: root.appendingPathComponent("kokoro_service.py"),
+                models: root.appendingPathComponent("models", isDirectory: true),
                 outputDirectory: output
             )
         }

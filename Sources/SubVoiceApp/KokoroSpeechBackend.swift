@@ -134,8 +134,10 @@ final class KokoroSpeechBackend: NSObject, SpeechBackend, AVAudioPlayerDelegate 
         ]
         service.currentDirectoryURL = runtime.root
         var environment = ProcessInfo.processInfo.environment
+        // Gói mới không có venv, nên interpreter không tự thấy dependency.
+        // PYTHONPATH là thứ duy nhất nối chúng lại.
         environment["PYTHONPATH"] = runtime.root
-            .appendingPathComponent("src", isDirectory: true).path
+            .appendingPathComponent("site-packages", isDirectory: true).path
         service.environment = environment
         service.standardInput = input
         service.standardOutput = output
