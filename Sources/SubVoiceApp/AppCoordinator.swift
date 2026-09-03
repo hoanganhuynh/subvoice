@@ -62,6 +62,7 @@ final class AppCoordinator {
     /// Nguồn trạng thái duy nhất mà cửa sổ chính và menu bar cùng đọc.
     let viewModel = AppViewModel(state: AppViewState())
     private var mainWindow: MainWindowController!
+    private let kokoroInstaller = KokoroInstaller()
 
     // Chạm từ hàng đợi bắt màn hình, nên không thể mang isolation của MainActor.
     // OCREngine tự khoá bên trong; CaptureQueueState chỉ có đúng một luồng dùng.
@@ -230,6 +231,7 @@ final class AppCoordinator {
                 ? .ready("Kokoro đã sẵn sàng")
                 : .unavailable(kokoroSpeech.unavailableReason ?? "Chưa cài Kokoro")
             state.launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
+            state.kokoroInstall = kokoroInstaller.state
         }
         menuBar?.render(viewModel.state)
     }
@@ -268,9 +270,10 @@ final class AppCoordinator {
             mainWindow.apply(theme: theme)
         case .setLaunchAtLogin(let enabled):
             setLaunchAtLogin(enabled)
-        case .downloadKokoro, .cancelKokoroDownload:
-            // Bộ tải Kokoro được nối dây ở task sau; hiện chưa làm gì.
-            break
+        case .downloadKokoro:
+            kokoroInstaller.start()
+        case .cancelKokoroDownload:
+            kokoroInstaller.cancel()
         case .recover(let action):
             recover(action)
         case .showMainWindow:
@@ -383,6 +386,16 @@ final class AppCoordinator {
         }
         configureSpeechBackend(systemSpeech)
         configureSpeechBackend(kokoroSpeech)
+
+        kokoroInstaller.onStateChange = { [weak self] state in
+            guard let self else { return }
+            // Dựng lại backend TRƯỚC khi phát state, để ảnh chụp đầu tiên người
+            // dùng thấy đã có `kokoroAvailable == true`.
+            if case .installed = state { self.rebuildKokoroBackend() }
+            self.viewModel.apply { $0.kokoroInstall = state }
+            self.menuBar?.render(self.viewModel.state)
+        }
+        kokoroInstaller.refreshInstalledState()
     }
 
     private func configureSpeechBackend(_ backend: SpeechBackend) {

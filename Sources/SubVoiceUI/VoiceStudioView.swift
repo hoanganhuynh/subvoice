@@ -36,9 +36,7 @@ struct VoiceStudioView: View {
                         .foregroundStyle(theme.primaryText)
                     EngineSelector(state: state, viewModel: viewModel)
                     if !state.kokoroAvailable {
-                        Label(state.kokoroStatus.message, systemImage: "info.circle")
-                            .font(.footnote)
-                            .foregroundStyle(theme.secondaryText)
+                        KokoroInstallRow(state: state, viewModel: viewModel)
                     }
                 }
 
@@ -204,5 +202,47 @@ struct SheetScaffold<Content: View>: View {
         .padding(AuroraTheme.spacingLarge)
         .frame(minWidth: 520, minHeight: 420)
         .background(theme.background)
+    }
+}
+
+/// Dòng cài Kokoro, dùng chung giữa Voice Studio, Settings và onboarding — cả
+/// ba đọc cùng một `kokoroInstall` nên không thể hiện tiến trình lệch nhau.
+struct KokoroInstallRow: View {
+
+    let state: AppViewState
+    let viewModel: AppViewModel
+
+    @Environment(\.aurora) private var theme
+
+    private var isFailed: Bool {
+        if case .failed = state.kokoroInstall { return true }
+        return false
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AuroraTheme.spacingXSmall) {
+            Text(state.kokoroInstall.statusText)
+                .font(.footnote)
+                .foregroundStyle(isFailed ? theme.warning : theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if state.kokoroInstall.isBusy {
+                HStack(spacing: AuroraTheme.spacingSmall) {
+                    if let progress = state.kokoroInstall.progress {
+                        ProgressView(value: progress)
+                    } else {
+                        ProgressView().progressViewStyle(.linear)
+                    }
+                    Button("Huỷ") { viewModel.send(.cancelKokoroDownload) }
+                }
+            } else {
+                Button(isFailed ? "Thử lại" : "Tải giọng Kokoro") {
+                    viewModel.send(.downloadKokoro)
+                }
+                .help("Tải bộ giọng Kokoro để đọc tự nhiên hơn")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Cài Kokoro: \(state.kokoroInstall.statusText)")
     }
 }
