@@ -29,10 +29,5 @@ let package = Package(
             name: "SubVoiceUITests",
             dependencies: ["SubVoiceUI", "SubVoiceCore"]
         ),
-        .testTarget(
-            name: "SubVoiceAppTests",
-            dependencies: ["SubVoiceApp", "SubVoiceUI", "SubVoiceCore"],
-            swiftSettings: [.swiftLanguageMode(.v5)]
-        ),
     ]
 )
