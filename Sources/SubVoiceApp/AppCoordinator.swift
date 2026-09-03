@@ -72,11 +72,17 @@ final class AppCoordinator {
 
     private var gate = TextGate()
     private var speechQueue = SpeechQueue()
-    private var settings = Store.loadSettings()
-    private lazy var kokoroSpeech = KokoroSpeechBackend(
-        voiceIdentifier: settings.kokoroVoiceIdentifier
-    )
+    private var settings: Settings
+    // Không còn `lazy`: `runtimeResult` được tính đúng một lần lúc khởi tạo, nên
+    // sau khi cài xong Kokoro phải dựng một instance MỚI thì app mới thấy nó.
+    private var kokoroSpeech: KokoroSpeechBackend
     private var region = Store.loadRegion()
+
+    init() {
+        let loaded = Store.loadSettings()
+        settings = loaded
+        kokoroSpeech = KokoroSpeechBackend(voiceIdentifier: loaded.kokoroVoiceIdentifier)
+    }
     private var isRunning = false
 
     private var speech: SpeechBackend {
@@ -386,6 +392,14 @@ final class AppCoordinator {
             guard let self, let backend, backend === self.kokoroSpeech else { return }
             self.fallbackFromKokoro(message)
         }
+    }
+
+    /// Dựng lại backend Kokoro sau khi cài xong, để 14 giọng xuất hiện ngay mà
+    /// người dùng không phải khởi động lại app.
+    private func rebuildKokoroBackend() {
+        kokoroSpeech.stop()
+        kokoroSpeech = KokoroSpeechBackend(voiceIdentifier: settings.kokoroVoiceIdentifier)
+        configureSpeechBackend(kokoroSpeech)
     }
 
     private func voicesForCurrentEngine() -> [SpeechVoiceOption] {

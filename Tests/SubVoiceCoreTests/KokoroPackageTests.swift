@@ -444,3 +444,20 @@ struct KokoroPackageTests {
         }
     }
 }
+
+@Suite("Kokoro package constants")
+struct KokoroPackageConstantsTests {
+
+    /// Ba giá trị này do người bảo trì dán tay sau khi chạy script đóng gói.
+    /// Dán thiếu hoặc dán nhầm chỗ là app không bao giờ cài được Kokoro.
+    @Test func currentPackageIsFullyFilledIn() {
+        let package = KokoroPackage.current
+        #expect(package.version == "1.0.0")
+        #expect(package.sha256.count == 64)
+        let isHex = package.sha256.allSatisfy { $0.isHexDigit }
+        #expect(isHex)
+        #expect(package.downloadBytes > 100_000_000)
+        #expect(package.downloadURL.absoluteString.hasSuffix(".tar.zst"))
+        #expect(package.downloadURL.absoluteString.contains(package.version))
+    }
+}

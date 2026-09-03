@@ -83,8 +83,6 @@ for junk in torch torchgen functorch transformers safetensors huggingface_hub \
            "${STAGE}/site-packages/${junk}"-*.dist-info \
            "${STAGE}/site-packages/${junk}".libs
 done
-find "${STAGE}" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
-find "${STAGE}" -name '*.pyc' -delete 2>/dev/null || true
 
 echo "==> Sau khi prune:  $(du -sh "${STAGE}/site-packages" | cut -f1)"
 
@@ -122,6 +120,11 @@ then
     echo "Nhieu kha nang danh sach prune da cat nham mot goi con can luc chay." >&2
     exit 1
 fi
+
+# Dọn SAU self-test, vì self-test import kokoro_service nên sinh lại
+# __pycache__. Dọn trước là gói lẫn .pyc và archive hết tái lập được.
+find "${STAGE}" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+find "${STAGE}" -name '*.pyc' -delete 2>/dev/null || true
 
 echo "==> Nen"
 mkdir -p "${OUT_DIR}"
