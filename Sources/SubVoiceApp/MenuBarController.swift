@@ -37,6 +37,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     func render(_ state: AppViewState) {
         renderRunState(state.runState)
+        renderNotice(state.notice, runState: state.runState)
         renderVoices(state.voices, selectedIdentifier: state.selectedVoiceIdentifier)
 
         for item in engineItems {
@@ -76,6 +77,26 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             warningItem.representedObject = warning.recovery.map(RecoveryBox.init)
             warningItem.isHidden = false
         }
+    }
+
+    /// Cảnh báo fallback không thay thế trạng thái nghe/đọc. Nhờ vậy menu vẫn
+    /// phản ánh hoạt động thật, đồng thời người dùng không bỏ lỡ lý do đổi
+    /// engine.
+    private func renderNotice(_ notice: AppWarning?, runState: AppRunState) {
+        let warning: AppWarning?
+        if case .warning(let stateWarning) = runState {
+            warning = stateWarning
+        } else {
+            warning = notice
+        }
+        guard let warning else {
+            warningItem.isHidden = true
+            warningItem.representedObject = nil
+            return
+        }
+        warningItem.title = warning.message
+        warningItem.representedObject = RecoveryBox(warning.recovery ?? .retry)
+        warningItem.isHidden = false
     }
 
     /// `RecoveryAction` là enum Swift thuần nên không đặt thẳng vào

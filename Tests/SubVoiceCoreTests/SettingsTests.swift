@@ -14,6 +14,24 @@ struct SettingsTests {
         #expect(settings.themeMode == .system)
     }
 
+    @Test func invalidThemeDoesNotDiscardTheRestOfThePayload() throws {
+        let data = Data(#"""
+        {
+          "storedRate": 0.625,
+          "storedVolume": 0.75,
+          "storedKokoroVoiceIdentifier": "mai_linh",
+          "storedThemeMode": "neon"
+        }
+        """#.utf8)
+
+        let settings = try JSONDecoder().decode(Settings.self, from: data)
+
+        #expect(settings.speechRate == 0.625)
+        #expect(settings.volume == 0.75)
+        #expect(settings.kokoroVoiceIdentifier == "mai_linh")
+        #expect(settings.themeMode == .system)
+    }
+
     @Test func onboardingFlagDefaultsToFalseAndSurvivesARoundTrip() throws {
         #expect(Settings().hasCompletedOnboarding == false)
 

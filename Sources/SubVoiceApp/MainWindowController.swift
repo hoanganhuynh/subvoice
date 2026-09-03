@@ -29,7 +29,9 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         )
         super.init()
         window.delegate = self
-        window.contentMinSize = NSSize(width: 720, height: 540)
+        // Control dock ba thẻ và notice fallback cần không gian thật. 540pt
+        // khiến nội dung dưới cùng bị cắt ở một số cỡ chữ Accessibility.
+        window.contentMinSize = NSSize(width: 720, height: 620)
         window.contentViewController = host
         window.title = "SubVoice"
         // Thanh tiêu đề trong suốt để nền aurora chảy hết khung; nếu không,
@@ -37,12 +39,13 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.setContentSize(NSSize(width: 820, height: 700))
-        window.center()
         // Khôi phục vị trí người dùng đã kéo, nhưng chỉ SAU khi kích thước mặc
         // định đã được đặt, để một frame cũ hỏng không khoá cửa sổ ở kích
         // thước sai.
-        window.setFrameUsingName("SubVoice.MainWindow")
         window.setFrameAutosaveName("SubVoice.MainWindow")
+        if !window.setFrameUsingName("SubVoice.MainWindow") {
+            window.center()
+        }
     }
 
     func show() {
