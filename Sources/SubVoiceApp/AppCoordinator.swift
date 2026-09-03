@@ -509,7 +509,18 @@ final class AppCoordinator {
     // MARK: - Máy trạng thái
 
     private func toggle() {
-        isRunning ? stop() : startCapturing()
+        switch CaptureTogglePolicy.action(
+            isCaptureRunning: isRunning,
+            isPreviewing: isPreviewing
+        ) {
+        case .startCapture:
+            startCapturing()
+        case .stopCapture:
+            stop()
+        case .stopPreview:
+            cancelPreviewIfNeeded()
+            refreshIdleState()
+        }
     }
 
     private func startCapturing() {

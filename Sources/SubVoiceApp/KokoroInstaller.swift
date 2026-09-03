@@ -13,8 +13,9 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
     private let layout: KokoroInstallLayout
     private let resumeDataURL: URL
     private let supportDirectory: URL
+    private let sessionConfiguration: URLSessionConfiguration
     private lazy var session = URLSession(
-        configuration: .default,
+        configuration: sessionConfiguration,
         delegate: self,
         delegateQueue: nil
     )
@@ -27,12 +28,20 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
         }
     }
 
-    init(package: KokoroPackage = .current, fileManager: FileManager = .default) {
+    init(
+        package: KokoroPackage = .current,
+        fileManager: FileManager = .default,
+        applicationSupportDirectory: URL? = nil,
+        sessionConfiguration: URLSessionConfiguration = .default
+    ) {
         self.package = package
-        let applicationSupport = fileManager.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first ?? fileManager.temporaryDirectory
+        self.sessionConfiguration = sessionConfiguration
+        let applicationSupport = applicationSupportDirectory
+            ?? fileManager.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first
+            ?? fileManager.temporaryDirectory
         layout = KokoroInstallLayout(applicationSupport: applicationSupport)
         supportDirectory = applicationSupport
             .appendingPathComponent("SubVoice", isDirectory: true)
@@ -50,6 +59,12 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
     /// một phiên trước đã cài xong.
     func refreshInstalledState() {
         guard !state.isBusy else { return }
+        setInstalledState()
+    }
+
+    /// Khác `refreshInstalledState()`, hàm này còn được dùng ngay sau hủy.
+    /// Lúc đó state vẫn đang bận nên không được đi qua guard của hàm public.
+    private func setInstalledState() {
         if let version = layout.installedVersion(), version == package.version {
             state = .installed(version: version)
         } else {
@@ -83,15 +98,22 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
     }
 
     func cancel() {
-        guard let task else { return }
+        guard state.isBusy else { return }
+        let task = task
         self.task = nil
-        task.cancel { [weak self] resumeData in
+        // Chuyển về terminal TRƯỚC callback bất đồng bộ của URLSession. Nếu
+        // callback download cũ đến trễ, `isCurrentTask` sẽ bỏ qua nó thay vì
+        // đưa UI quay lại trạng thái busy.
+        setInstalledState()
+        task?.cancel { [weak self] resumeData in
             guard let self, let resumeData else { return }
             Task { @MainActor in
+                // Người dùng có thể đã bấm tải lại trước khi URLSession kịp
+                // trả resume data. Không để lượt hủy cũ ghi đè lượt mới.
+                guard self.task == nil, !self.state.isBusy else { return }
                 try? resumeData.write(to: self.resumeDataURL)
             }
         }
-        refreshInstalledState()
     }
 
     // MARK: - URLSessionDownloadDelegate
@@ -104,7 +126,7 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
         totalBytesExpectedToWrite: Int64
     ) {
         Task { @MainActor [weak self] in
-            guard let self, self.state.isBusy else { return }
+            guard let self, self.isCurrentTask(downloadTask) else { return }
             self.state = .downloading(
                 received: totalBytesWritten,
                 total: totalBytesExpectedToWrite
@@ -130,7 +152,12 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
             return
         }
         Task { @MainActor [weak self] in
-            self?.install(archive: staged)
+            guard let self, self.isCurrentTask(downloadTask) else {
+                try? FileManager.default.removeItem(at: staged)
+                return
+            }
+            self.task = nil
+            self.install(archive: staged)
         }
     }
 
@@ -141,9 +168,17 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
     ) {
         guard let error, (error as NSError).code != NSURLErrorCancelled else { return }
         Task { @MainActor [weak self] in
-            guard let self, self.state.isBusy else { return }
+            guard let self, self.isCurrentTask(task) else { return }
+            self.task = nil
             self.state = .failed(message: error.localizedDescription)
         }
+    }
+
+    /// URLSession có thể gửi progress/complete của lượt cũ sau `cancel()` hoặc
+    /// sau khi người dùng đã bấm tải lại. Chỉ lượt task đang sở hữu state mới
+    /// có quyền đổi giao diện.
+    private func isCurrentTask(_ candidate: URLSessionTask) -> Bool {
+        task === candidate && state.isBusy
     }
 
     private func install(archive: URL) {
