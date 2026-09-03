@@ -25,6 +25,8 @@ Chọn một vùng phụ đề trên màn hình. SubVoice nhận diện chữ ti
 - **Hai bộ đọc offline:** giọng hệ thống nhanh và Kokoro tự nhiên với 14 giọng Việt.
 - **Voice Studio** — đổi bộ đọc, giọng, tốc độ, âm lượng và thử giọng ngay tại chỗ.
 - **Lịch sử chỉ trong phiên** — tìm kiếm, sao chép, tự xoá khi thoát app.
+- **Cài Kokoro từ trong app** — một gói tự chứa, tải nền, không cần Python trên máy.
+- **Hướng dẫn lần đầu** năm bước, bỏ qua được ở bất kỳ đâu.
 - **Chẩn đoán tại chỗ** cho quyền Screen Recording, giọng hệ thống và Kokoro.
 - **Không đọc lặp** khi phụ đề đứng yên; xử lý được phụ đề xuất hiện kiểu fade-in.
 - **Không bỏ câu đã nhận diện** — hàng đợi FIFO giữ đúng thứ tự hội thoại.
@@ -76,11 +78,13 @@ Sau khi cấp quyền, hãy thoát rồi mở lại SubVoice.
 
 ## Sử dụng
 
-1. Mở SubVoice. Cửa sổ chính hiện ra ở trạng thái dừng — app không bao giờ tự đọc khi vừa khởi động.
-2. Bấm thẻ **Vùng đọc**, rồi kéo quanh khu vực hiển thị phụ đề.
-3. Bấm **Bắt đầu đọc**.
-4. Bấm thẻ **Giọng đọc** để mở Voice Studio và chỉnh bộ đọc, giọng, tốc độ, âm lượng.
-5. Bấm thẻ **Vừa đọc** để tìm và sao chép những câu đã đọc trong phiên.
+1. Lần đầu mở, SubVoice dẫn bạn qua năm bước: cấp quyền, chọn giọng, chọn vùng.
+   Bỏ qua bước nào cũng được, và chạy lại được từ **Cài đặt → Chạy lại hướng dẫn**.
+2. Cửa sổ chính mở ra ở trạng thái dừng — app không bao giờ tự đọc khi vừa khởi động.
+3. Bấm thẻ **Vùng đọc**, rồi kéo quanh khu vực hiển thị phụ đề.
+4. Bấm **Bắt đầu đọc**.
+5. Bấm thẻ **Giọng đọc** để mở Voice Studio và chỉnh bộ đọc, giọng, tốc độ, âm lượng.
+6. Bấm thẻ **Vừa đọc** để tìm và sao chép những câu đã đọc trong phiên.
 
 Đóng cửa sổ không làm SubVoice dừng lại: app tiếp tục chạy trên menu bar và pipeline
 đang đọc không bị ngắt. Bấm Dock icon hoặc **Mở SubVoice** trên menu bar để hiện lại
@@ -110,28 +114,34 @@ Nếu máy chưa có giọng Việt, mở:
 
 Dùng [Kokoro-Vietnamese](https://github.com/iamdinhthuan/Kokoro-Vietnamese) qua ONNX Runtime. Model được nạp trong một tiến trình Python thường trú; SubVoice hỗ trợ 14 voice pack và tự chuyển về giọng hệ thống nếu Kokoro gặp lỗi.
 
-Kokoro cần khoảng **1,3 GB** cho runtime và model. Các tệp này không được commit vào repo.
+Gói Kokoro nặng khoảng **680 MB** khi tải và khoảng 1,1 GB sau khi giải nén. Nó gồm sẵn một bản CPython relocatable, nên máy bạn không cần cài Python. Các tệp này không được commit vào repo.
 
-#### Chuẩn bị Kokoro
+#### Cài Kokoro
 
-```bash
-git clone https://github.com/iamdinhthuan/Kokoro-Vietnamese.git \
-  ThirdParty/Kokoro-Vietnamese
+Không cần chuẩn bị gì. Mở SubVoice, vào **Cài đặt → Chẩn đoán → Kokoro** rồi bấm
+**Tải giọng Kokoro**. App tải một gói tự chứa gồm cả Python runtime lẫn model,
+đối chiếu SHA-256 rồi cài vào máy.
 
-python3 -m venv ThirdParty/Kokoro-Vietnamese/.venv
-ThirdParty/Kokoro-Vietnamese/.venv/bin/pip install \
-  -e "ThirdParty/Kokoro-Vietnamese[onnx]"
+Tải xong là 14 giọng Kokoro xuất hiện ngay, **không cần khởi động lại app**. Gói
+này chỉ có bản Apple Silicon.
 
-ThirdParty/Kokoro-Vietnamese/.venv/bin/hf download \
-  contextboxai/Kokoro-Vietnamese \
-  --local-dir ThirdParty/Kokoro-Vietnamese/models
-```
+Trong lúc tải, SubVoice vẫn dùng được bình thường với giọng hệ thống. Thoát app
+giữa chừng cũng không mất phần đã tải — lần mở sau tải tiếp.
 
-Sau đó đóng gói app kèm runtime Kokoro:
+#### Đóng gói lại Kokoro (dành cho người bảo trì)
 
 ```bash
-SUBVOICE_INCLUDE_KOKORO=1 ./Scripts/bundle.sh release
+./Scripts/package-kokoro.sh 1.0.0
 ```
+
+Script dựng một CPython relocatable, cài dependency bằng `pip install --target`,
+tải model, convert voicepack sang `.npy`, cắt bỏ toàn bộ stack PyTorch, rồi
+**chạy self-test dưới `env -i`** trước khi nén. Self-test hỏng thì archive không
+được tạo ra.
+
+Script in ra `SHA256` và `SIZE`. Dán hai giá trị đó vào `KokoroPackage.current`
+trong `Sources/SubVoiceCore/KokoroPackage.swift`, rồi attach archive vào GitHub
+Release trùng tag với `downloadURL`.
 
 Runtime được cài tại:
 
@@ -172,6 +182,7 @@ Scripts/
 ├── bundle.sh         # Build, ký và cài SubVoice.app
 ├── smoke-overlay.sh  # Kiểm tra vòng đời overlay
 ├── smoke-window.sh   # Kiểm tra vòng đời cửa sổ chính
+├── package-kokoro.sh # Đóng gói runtime Kokoro (người bảo trì)
 └── trace.sh          # Đọc trace chẩn đoán
 
 Tests/

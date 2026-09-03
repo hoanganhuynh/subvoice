@@ -9,6 +9,7 @@ struct OnboardingView: View {
     let viewModel: AppViewModel
 
     @Environment(\.aurora) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var step: OnboardingStep = .welcome
 
     var body: some View {
@@ -17,19 +18,38 @@ struct OnboardingView: View {
 
             VStack(alignment: .leading, spacing: AuroraTheme.spacingMedium) {
                 header
-                Text(step.title)
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(theme.primaryText)
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+                OnboardingIllustration(step: step)
+                    .id(step)
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .asymmetric(
+                                insertion: .opacity.combined(with: .scale(scale: 0.97)),
+                                removal: .opacity
+                            )
+                    )
+
+                VStack(alignment: .leading, spacing: AuroraTheme.spacingSmall) {
+                    Text(step.title)
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(theme.primaryText)
+                    content
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Spacer(minLength: AuroraTheme.spacingXSmall)
+
                 footer
             }
             .padding(AuroraTheme.spacingLarge)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: step)
         }
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: AuroraTheme.spacingSmall) {
+            OnboardingDots(current: step)
             Text(step.indicator)
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(theme.secondaryText)
