@@ -106,6 +106,8 @@ public enum AppIntent: Equatable, Sendable {
     case setLaunchAtLogin(Bool)
     case downloadKokoro
     case cancelKokoroDownload
+    case finishOnboarding
+    case restartOnboarding
     case recover(RecoveryAction)
     case showMainWindow
     case quit

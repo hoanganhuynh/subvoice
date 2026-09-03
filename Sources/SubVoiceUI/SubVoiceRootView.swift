@@ -33,6 +33,21 @@ public struct SubVoiceRootView: View {
     }
 
     public var body: some View {
+        Group {
+            if viewModel.state.settings.hasCompletedOnboarding {
+                dashboard
+            } else {
+                OnboardingView(state: viewModel.state, viewModel: viewModel)
+            }
+        }
+        .environment(\.aurora, theme)
+        .sheet(item: $route) { route in
+            sheet(for: route)
+                .environment(\.aurora, theme)
+        }
+    }
+
+    private var dashboard: some View {
         FocusDashboardView(
             state: viewModel.state,
             viewModel: viewModel,
@@ -40,11 +55,6 @@ public struct SubVoiceRootView: View {
             onOpenVoiceStudio: { route = .voiceStudio },
             onOpenTranscript: { route = .transcript }
         )
-        .environment(\.aurora, theme)
-        .sheet(item: $route) { route in
-            sheet(for: route)
-                .environment(\.aurora, theme)
-        }
     }
 
     @ViewBuilder

@@ -124,6 +124,11 @@ final class AppCoordinator {
             NSLog("Không dùng được Kokoro: %@", kokoroSpeech.unavailableReason ?? "không rõ lỗi")
             settings.speechEngine = .system
         }
+        // Người dùng bản cũ đã có vùng đọc thì coi như đã onboard — không bắt
+        // họ xem lại wizard chỉ vì nâng cấp app.
+        if !settings.hasCompletedOnboarding && region != nil {
+            settings.hasCompletedOnboarding = true
+        }
         Store.saveSettings(settings)
         menuBar = MenuBarController()
         mainWindow = MainWindowController(viewModel: viewModel)
@@ -274,6 +279,15 @@ final class AppCoordinator {
             kokoroInstaller.start()
         case .cancelKokoroDownload:
             kokoroInstaller.cancel()
+        case .finishOnboarding:
+            settings.hasCompletedOnboarding = true
+            Store.saveSettings(settings)
+            publishSnapshot()
+        case .restartOnboarding:
+            settings.hasCompletedOnboarding = false
+            Store.saveSettings(settings)
+            publishSnapshot()
+            showMainWindow()
         case .recover(let action):
             recover(action)
         case .showMainWindow:
