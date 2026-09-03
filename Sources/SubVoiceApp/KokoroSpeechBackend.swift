@@ -23,9 +23,9 @@ final class KokoroSpeechBackend: NSObject, SpeechBackend, AVAudioPlayerDelegate 
         .init(identifier: "tuan_ngoc", name: "Tuấn Ngọc"),
     ]
 
-    var onStart: (() -> Void)?
-    var onFinish: (() -> Void)?
-    var onError: ((String) -> Void)?
+    var onStart: ((UUID) -> Void)?
+    var onFinish: ((UUID) -> Void)?
+    var onError: ((UUID, String) -> Void)?
 
     private let runtimeResult: Result<KokoroRuntime, Error>
     private let protocolQueue = DispatchQueue(label: "SubVoice.KokoroProtocol")
@@ -36,6 +36,7 @@ final class KokoroSpeechBackend: NSObject, SpeechBackend, AVAudioPlayerDelegate 
     private var stderrPipe: Pipe?
     private var player: AVAudioPlayer?
     private var activeRequestID: String?
+    private var activeToken: UUID?
     private var activeAudioURL: URL?
     private var requestedVolume: Float = 1
     private(set) var voiceIdentifier: String
@@ -76,7 +77,7 @@ final class KokoroSpeechBackend: NSObject, SpeechBackend, AVAudioPlayerDelegate 
         }
     }
 
-    func speak(_ text: String, rate: Float, volume: Float) {
+    func speak(_ text: String, rate: Float, volume: Float, token: UUID) {
         do {
             try startProcessIfNeeded()
             guard let input = stdinPipe?.fileHandleForWriting else {
@@ -85,6 +86,7 @@ final class KokoroSpeechBackend: NSObject, SpeechBackend, AVAudioPlayerDelegate 
 
             let identifier = UUID().uuidString
             activeRequestID = identifier
+            activeToken = token
             requestedVolume = volume
             let speed = SpeechRateMapping.kokoroSpeed(for: rate)
             let request = KokoroRequest(
@@ -103,6 +105,7 @@ final class KokoroSpeechBackend: NSObject, SpeechBackend, AVAudioPlayerDelegate 
 
     func stop() {
         activeRequestID = nil
+        activeToken = nil
         player?.stop()
         player = nil
         removeActiveAudio()
@@ -212,7 +215,8 @@ final class KokoroSpeechBackend: NSObject, SpeechBackend, AVAudioPlayerDelegate 
             guard audio.prepareToPlay(), audio.play() else {
                 throw KokoroBackendError.cannotPlayAudio
             }
-            onStart?()
+            guard let token = activeToken else { return }
+            onStart?(token)
         } catch {
             fail(error.localizedDescription, finishRequest: true)
         }
@@ -220,12 +224,14 @@ final class KokoroSpeechBackend: NSObject, SpeechBackend, AVAudioPlayerDelegate 
 
     private func fail(_ message: String, finishRequest: Bool) {
         let hadRequest = activeRequestID != nil
+        let token = activeToken
         activeRequestID = nil
+        activeToken = nil
         player?.stop()
         player = nil
         removeActiveAudio()
-        onError?(message)
-        if finishRequest && hadRequest { onFinish?() }
+        if let token { onError?(token, message) }
+        if finishRequest && hadRequest, let token { onFinish?(token) }
     }
 
     private func removeActiveAudio() {
@@ -235,11 +241,14 @@ final class KokoroSpeechBackend: NSObject, SpeechBackend, AVAudioPlayerDelegate 
     }
 
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        let token = activeToken
         activeRequestID = nil
+        activeToken = nil
         self.player = nil
         removeActiveAudio()
-        if !flag { onError?("Không phát hết được âm thanh Kokoro") }
-        onFinish?()
+        guard let token else { return }
+        if !flag { onError?(token, "Không phát hết được âm thanh Kokoro") }
+        onFinish?(token)
     }
 }
 

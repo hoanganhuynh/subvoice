@@ -59,6 +59,9 @@ public enum DiagnosticStatus: Equatable, Sendable {
 /// tạo ra giá trị này.
 public struct AppViewState: Equatable, Sendable {
     public var runState: AppRunState = .stopped
+    /// Thông báo không chặn hoạt động hiện tại. Ví dụ Kokoro có thể lỗi trong
+    /// lúc capture vẫn tiếp tục nghe bằng bộ đọc hệ thống.
+    public var notice: AppWarning?
     public var settings = Settings()
     public var voices: [SpeechVoiceOption] = []
     public var region: RegionSummary?

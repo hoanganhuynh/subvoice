@@ -11,6 +11,7 @@ public struct SubVoiceRootView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @State private var route: SheetRoute?
+    @FocusState private var dashboardFocused: Bool
 
     private let appVersion: String
 
@@ -55,6 +56,8 @@ public struct SubVoiceRootView: View {
             onOpenVoiceStudio: { route = .voiceStudio },
             onOpenTranscript: { route = .transcript }
         )
+        .focusable()
+        .focused($dashboardFocused)
     }
 
     @ViewBuilder
@@ -64,21 +67,28 @@ public struct SubVoiceRootView: View {
             VoiceStudioView(
                 state: viewModel.state,
                 viewModel: viewModel,
-                onClose: { self.route = nil }
+                onClose: dismissSheet
             )
         case .transcript:
             TranscriptDrawerView(
                 state: viewModel.state,
                 viewModel: viewModel,
-                onClose: { self.route = nil }
+                onClose: dismissSheet
             )
         case .settings:
             SettingsView(
                 state: viewModel.state,
                 viewModel: viewModel,
                 appVersion: appVersion,
-                onClose: { self.route = nil }
+                onClose: dismissSheet
             )
+        }
+    }
+
+    private func dismissSheet() {
+        route = nil
+        DispatchQueue.main.async {
+            dashboardFocused = true
         }
     }
 }

@@ -43,10 +43,14 @@ struct FocusDashboardView: View {
             VStack(spacing: AuroraTheme.spacingMedium) {
                 TopBar(state: state, onOpenSettings: onOpenSettings)
 
+                if let notice = state.notice {
+                    NoticeBanner(warning: notice)
+                }
+
                 Spacer(minLength: AuroraTheme.spacingXSmall)
 
-                // Cửa sổ co xuống tới 540 điểm chiều cao, nên orb phải nhỏ lại
-                // thay vì để cả cụm trung tâm bị cắt mất.
+                // Vẫn có fallback compact khi người dùng tăng cỡ chữ hoặc cửa
+                // sổ bị thu nhỏ gần ngưỡng 620 điểm.
                 ViewThatFits(in: .vertical) {
                     hero(orbSize: 176)
                     hero(orbSize: 128)
@@ -68,6 +72,22 @@ struct FocusDashboardView: View {
             }
             .padding(AuroraTheme.spacingLarge)
         }
+    }
+}
+
+private struct NoticeBanner: View {
+    let warning: AppWarning
+    @Environment(\.aurora) private var theme
+
+    var body: some View {
+        Label(warning.message, systemImage: "exclamationmark.triangle.fill")
+            .font(.footnote)
+            .foregroundStyle(theme.warning)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, AuroraTheme.spacingSmall)
+            .padding(.vertical, AuroraTheme.spacingXSmall)
+            .background(AuroraCardBackground())
+            .accessibilityLabel("Thông báo: \(warning.message)")
     }
 }
 

@@ -46,4 +46,16 @@ struct AppViewModelTests {
             .recover(.openScreenRecordingSettings),
         ])
     }
+
+    @Test func fallbackNoticeDoesNotTurnAnActiveCaptureIntoStopped() {
+        var state = AppViewState()
+        state.runState = .listening
+        state.notice = AppWarning(
+            message: "Kokoro lỗi — đã chuyển về giọng hệ thống",
+            recovery: .retry
+        )
+
+        #expect(state.isCapturing)
+        #expect(state.notice?.recovery == .retry)
+    }
 }

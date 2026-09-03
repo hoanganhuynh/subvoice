@@ -6,12 +6,13 @@ import SubVoiceCore
 /// Khoảng 50ms là có tiếng — đây là lý do nó được chọn thay vì engine neural.
 final class SystemSpeechBackend: NSObject, SpeechBackend, AVSpeechSynthesizerDelegate {
 
-    var onStart: (() -> Void)?
-    var onFinish: (() -> Void)?
-    var onError: ((String) -> Void)?
+    var onStart: ((UUID) -> Void)?
+    var onFinish: ((UUID) -> Void)?
+    var onError: ((UUID, String) -> Void)?
 
     private let synthesizer = AVSpeechSynthesizer()
     private var voice: AVSpeechSynthesisVoice?
+    private var tokensByUtterance: [ObjectIdentifier: UUID] = [:]
 
     override init() {
         voice = Self.defaultVietnameseVoice()
@@ -46,7 +47,7 @@ final class SystemSpeechBackend: NSObject, SpeechBackend, AVSpeechSynthesizerDel
         synthesizer.speak(utterance)
     }
 
-    func speak(_ text: String, rate: Float, volume: Float) {
+    func speak(_ text: String, rate: Float, volume: Float, token: UUID) {
         guard let voice else { return }
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = voice
@@ -54,10 +55,14 @@ final class SystemSpeechBackend: NSObject, SpeechBackend, AVSpeechSynthesizerDel
         utterance.volume = volume
         utterance.preUtteranceDelay = 0
         utterance.postUtteranceDelay = 0
+        tokensByUtterance[ObjectIdentifier(utterance)] = token
         synthesizer.speak(utterance)
     }
 
     func stop() {
+        // Bỏ token trước khi synthesizer phát delegate `didCancel`, để callback
+        // của lượt cũ không thể chạm vào activity mới của coordinator.
+        tokensByUtterance.removeAll(keepingCapacity: false)
         synthesizer.stopSpeaking(at: .immediate)
     }
 
@@ -80,23 +85,27 @@ final class SystemSpeechBackend: NSObject, SpeechBackend, AVSpeechSynthesizerDel
         _ synthesizer: AVSpeechSynthesizer,
         didStart utterance: AVSpeechUtterance
     ) {
-        guard utterance.volume > 0 else { return }   // bỏ qua câu hâm nóng
-        onStart?()
+        guard utterance.volume > 0,
+              let token = tokensByUtterance[ObjectIdentifier(utterance)]
+        else { return }   // bỏ qua câu hâm nóng
+        onStart?(token)
     }
 
     func speechSynthesizer(
         _ synthesizer: AVSpeechSynthesizer,
         didFinish utterance: AVSpeechUtterance
     ) {
-        guard utterance.volume > 0 else { return }
-        onFinish?()
+        let token = tokensByUtterance.removeValue(forKey: ObjectIdentifier(utterance))
+        guard utterance.volume > 0, let token else { return }
+        onFinish?(token)
     }
 
     func speechSynthesizer(
         _ synthesizer: AVSpeechSynthesizer,
         didCancel utterance: AVSpeechUtterance
     ) {
-        guard utterance.volume > 0 else { return }
-        onFinish?()
+        let token = tokensByUtterance.removeValue(forKey: ObjectIdentifier(utterance))
+        guard utterance.volume > 0, let token else { return }
+        onFinish?(token)
     }
 }

@@ -53,6 +53,19 @@ final class CaptureQueueState {
 @MainActor
 final class AppCoordinator {
 
+    private enum SpeechActivity {
+        case idle
+        case preview(UUID)
+        case capture(UUID)
+
+        var token: UUID? {
+            switch self {
+            case .idle: nil
+            case .preview(let token), .capture(let token): token
+            }
+        }
+    }
+
     private let capturer = ScreenCapturer()
     private let systemSpeech = SystemSpeechBackend()
     private let regionSelector = RegionSelector()
@@ -78,6 +91,9 @@ final class AppCoordinator {
     // sau khi cài xong Kokoro phải dựng một instance MỚI thì app mới thấy nó.
     private var kokoroSpeech: KokoroSpeechBackend
     private var region = Store.loadRegion()
+    private var speechActivity: SpeechActivity = .idle
+    private var isSelectingRegion = false
+    private var activeNotice: AppWarning?
 
     init() {
         let loaded = Store.loadSettings()
@@ -85,6 +101,11 @@ final class AppCoordinator {
         kokoroSpeech = KokoroSpeechBackend(voiceIdentifier: loaded.kokoroVoiceIdentifier)
     }
     private var isRunning = false
+
+    private var isPreviewing: Bool {
+        if case .preview = speechActivity { return true }
+        return false
+    }
 
     private var speech: SpeechBackend {
         settings.speechEngine == .kokoro ? kokoroSpeech : systemSpeech
@@ -237,6 +258,7 @@ final class AppCoordinator {
                 : .unavailable(kokoroSpeech.unavailableReason ?? "Chưa cài Kokoro")
             state.launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
             state.kokoroInstall = kokoroInstaller.state
+            state.notice = activeNotice
         }
         menuBar?.render(viewModel.state)
     }
@@ -309,13 +331,20 @@ final class AppCoordinator {
         publishSnapshot()
     }
 
-    /// Chỉ cho thử giọng lúc đang dừng, để không cắt ngang câu phụ đề đang đọc.
+    /// Preview và capture không bao giờ cùng tồn tại. Đánh dấu activity trước
+    /// khi gọi backend để lần refresh menu kế tiếp không hiển thị "đang dừng"
+    /// trong lúc loa vẫn đang phát.
     private func previewVoice() {
-        guard !isRunning else { return }
+        guard !isRunning, !isSelectingRegion, !isPreviewing else { return }
+        let token = UUID()
+        activeNotice = nil
+        speechActivity = .preview(token)
+        publishSnapshot(runState: .speaking)
         speech.speak(
             "Xin chào, đây là giọng đọc của SubVoice.",
             rate: settings.speechRate,
-            volume: settings.volume
+            volume: settings.volume,
+            token: token
         )
     }
 
@@ -365,7 +394,7 @@ final class AppCoordinator {
     /// người dùng hầu như luôn cấp quyền lúc app đang chạy. Tính lại mỗi lần mở
     /// menu để không hiện cảnh báo đã cũ.
     private func refreshIdleState() {
-        guard !isRunning else { return }
+        guard !isRunning, !isPreviewing, !isSelectingRegion else { return }
         publishSnapshot(runState: idleWarning().map(AppRunState.warning) ?? .stopped)
     }
 
@@ -413,11 +442,11 @@ final class AppCoordinator {
     }
 
     private func configureSpeechBackend(_ backend: SpeechBackend) {
-        backend.onStart = { [weak self] in self?.handleSpeechStarted() }
-        backend.onFinish = { [weak self] in self?.handleSpeechFinished() }
-        backend.onError = { [weak self, weak backend] message in
+        backend.onStart = { [weak self] token in self?.handleSpeechStarted(token) }
+        backend.onFinish = { [weak self] token in self?.handleSpeechFinished(token) }
+        backend.onError = { [weak self, weak backend] token, message in
             guard let self, let backend, backend === self.kokoroSpeech else { return }
-            self.fallbackFromKokoro(message)
+            self.fallbackFromKokoro(message, token: token)
         }
     }
 
@@ -437,6 +466,9 @@ final class AppCoordinator {
 
     private func switchSpeechEngine(to engine: SpeechEngine) {
         guard engine != settings.speechEngine else { return }
+        // Dù engine đích chưa sẵn sàng, thao tác đổi engine là một ranh giới
+        // rõ ràng: preview cũ phải dừng ngay, không chờ backend callback.
+        cancelPreviewIfNeeded()
         if engine == .kokoro && !kokoroSpeech.isAvailable {
             publishSnapshot(runState: .warning(AppWarning(
                 message: kokoroSpeech.unavailableReason ?? "Chưa cài Kokoro",
@@ -445,24 +477,33 @@ final class AppCoordinator {
             return
         }
 
-        speechQueue.reset()
-        speech.stop()
+        cancelActiveSpeech()
         settings.speechEngine = engine
         Store.saveSettings(settings)
         speech.warmUp()
         if isRunning { publishSnapshot(runState: .listening) } else { refreshIdleState() }
     }
 
-    private func fallbackFromKokoro(_ message: String) {
-        guard settings.speechEngine == .kokoro else { return }
+    private func fallbackFromKokoro(_ message: String, token: UUID) {
+        guard settings.speechEngine == .kokoro, speechActivity.token == token else { return }
         NSLog("Kokoro lỗi, chuyển về giọng hệ thống: %@", message)
+        // `KokoroSpeechBackend.fail` có thể gọi onError rồi onFinish ngay trên
+        // cùng call stack. Xoá activity trước, để onFinish của lượt lỗi không
+        // thể dọn notice hoặc làm trôi trạng thái capture hiện tại.
+        speechActivity = .idle
+        speechQueue.reset()
         kokoroSpeech.stop()
         settings.speechEngine = .system
         Store.saveSettings(settings)
-        publishSnapshot(runState: .warning(AppWarning(
+        activeNotice = AppWarning(
             message: "Kokoro lỗi — đã chuyển về giọng hệ thống",
             recovery: .retry
-        )))
+        )
+        if isRunning {
+            publishSnapshot(runState: .listening)
+        } else {
+            refreshIdleState()
+        }
     }
 
     // MARK: - Máy trạng thái
@@ -472,6 +513,7 @@ final class AppCoordinator {
     }
 
     private func startCapturing() {
+        guard !isSelectingRegion else { return }
         guard PermissionHelper.hasScreenRecordingAccess else {
             PermissionHelper.requestScreenRecordingAccess()
             publishSnapshot(runState: .warning(AppWarning(
@@ -481,13 +523,15 @@ final class AppCoordinator {
             return
         }
         guard let region else {
-            reselectRegion()   // chưa chọn vùng thì mở overlay trước
+            reselectRegion(initiatedByStart: true) // chưa chọn vùng thì mở overlay trước
             return
         }
 
         captureState.reset()
         gate.clear()
         speechQueue.reset()
+        cancelPreviewIfNeeded()
+        activeNotice = nil
         isRunning = true
         publishSnapshot(runState: .listening)
 
@@ -509,26 +553,43 @@ final class AppCoordinator {
         isRunning = false
         capturer.stop()
         ocr.reset()
-        speech.stop()
-        speechQueue.reset()
+        cancelActiveSpeech()
         gate.clear()
         publishSnapshot(runState: .stopped)
         reportLatenciesIfMeasuring()
     }
 
-    private func reselectRegion() {
-        let wasRunning = isRunning
-        if wasRunning { stop() }
+    private func reselectRegion(initiatedByStart: Bool = false) {
+        guard !isSelectingRegion else { return }
+        let shouldResume = RegionSelectionPolicy.shouldResumeCapture(
+            captureWasRunning: isRunning,
+            initiatedByStart: initiatedByStart
+        )
+        isSelectingRegion = true
+        // Overlay không được đè lên OCR hay bất kỳ audio nào. `stop()` xoá cả
+        // hàng đợi, còn preview được dừng rõ ràng cả khi backend không callback.
+        if isRunning {
+            stop()
+        } else {
+            cancelPreviewIfNeeded()
+            publishSnapshot(runState: idleWarning().map(AppRunState.warning) ?? .stopped)
+        }
 
         regionSelector.begin { [weak self] selected in
             guard let self else { return }
+            self.isSelectingRegion = false
             guard let selected else {
-                if wasRunning { self.startCapturing() }
+                if shouldResume { self.startCapturing() }
+                else { self.refreshIdleState() }
                 return
             }
             self.region = selected
             Store.saveRegion(selected)
-            self.startCapturing()
+            if shouldResume {
+                self.startCapturing()
+            } else {
+                self.refreshIdleState()
+            }
         }
     }
 
@@ -591,7 +652,7 @@ final class AppCoordinator {
     }
 
     private func handleText(_ text: String) {
-        guard isRunning else { return }
+        guard isRunning, !isSelectingRegion else { return }
 
         if tracing { TraceLog.shared.write("ocr       \"\(text)\"") }
 
@@ -614,11 +675,30 @@ final class AppCoordinator {
                 + " cho=\(speechQueue.pendingCount)")
         }
         guard let immediate else { return }
-        speech.speak(immediate, rate: settings.speechRate, volume: settings.volume)
+        speakCaptureSentence(immediate)
     }
 
-    private func handleSpeechStarted() {
-        publishSnapshot(runState: isRunning ? .speaking : .stopped)
+    private func speakCaptureSentence(_ text: String) {
+        guard isRunning, !isSelectingRegion else { return }
+        let token = UUID()
+        speechActivity = .capture(token)
+        speech.speak(text, rate: settings.speechRate, volume: settings.volume, token: token)
+    }
+
+    private func cancelPreviewIfNeeded() {
+        guard isPreviewing else { return }
+        cancelActiveSpeech()
+    }
+
+    private func cancelActiveSpeech() {
+        speechActivity = .idle
+        speechQueue.reset()
+        speech.stop()
+    }
+
+    private func handleSpeechStarted(_ token: UUID) {
+        guard speechActivity.token == token else { return }
+        publishSnapshot(runState: (isRunning || isPreviewing) ? .speaking : .stopped)
 
         guard measuringLatency else { return }
         latencyLock.lock()
@@ -633,12 +713,26 @@ final class AppCoordinator {
         NSLog("Độ trễ: %.0fms", milliseconds)
     }
 
-    private func handleSpeechFinished() {
-        guard let next = speechQueue.finished() else {
-            if isRunning { publishSnapshot(runState: .listening) }
+    private func handleSpeechFinished(_ token: UUID) {
+        guard speechActivity.token == token else { return }
+        switch speechActivity {
+        case .idle:
             return
+        case .preview:
+            speechActivity = .idle
+            refreshIdleState()
+        case .capture:
+            guard isRunning, !isSelectingRegion else {
+                speechActivity = .idle
+                return
+            }
+            guard let next = speechQueue.finished() else {
+                speechActivity = .idle
+                publishSnapshot(runState: .listening)
+                return
+            }
+            speakCaptureSentence(next)
         }
-        speech.speak(next, rate: settings.speechRate, volume: settings.volume)
     }
 
     private func reportLatenciesIfMeasuring() {
