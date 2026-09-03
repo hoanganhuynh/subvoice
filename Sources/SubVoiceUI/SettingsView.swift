@@ -31,6 +31,10 @@ struct SettingsView: View {
                             )
                         )
                         .toggleStyle(.switch)
+
+                        Button("Chạy lại hướng dẫn") {
+                            viewModel.send(.restartOnboarding)
+                        }
                     }
 
                     section("Chẩn đoán") {
