@@ -4,12 +4,38 @@ import argparse
 import json
 import os
 import sys
+import types
 from pathlib import Path
 
+import numpy as np
 import soundfile as sf
-import torch
-from kokoro_vietnamese.core import SAMPLE_RATE, VOICES
-from kokoro_vietnamese.onnx_cli import KokoroVietnameseONNX
+
+
+def _install_numpy_torch_stub():
+    """Cho phép bỏ hẳn torch (~430 MB) ra khỏi gói runtime.
+
+    Đường ONNX của Kokoro chỉ dùng torch đúng một chỗ: `torch.load` để nạp
+    voicepack trong `KokoroVietnameseONNX.__init__`. Voicepack đã được đóng gói
+    sang .npy, và `select_voice_style` vốn nhận thẳng mảng numpy, nên một module
+    giả có mỗi hàm `load` là đủ. `setdefault` để torch thật — nếu có, như khi
+    chạy từ cây nguồn lúc phát triển — vẫn thắng.
+
+    `np.load` chỉ đọc mảng thuần; nó từ chối tệp cần deserialise đối tượng.
+    """
+    stub = types.ModuleType("torch")
+    stub.load = lambda path, *_args, **_kwargs: np.load(path)
+    sys.modules.setdefault("torch", stub)
+
+
+_install_numpy_torch_stub()
+
+from kokoro_vietnamese.core import SAMPLE_RATE, VOICES  # noqa: E402
+from kokoro_vietnamese.onnx_cli import KokoroVietnameseONNX  # noqa: E402
+
+
+def voicepack_path(models: Path, voice: str) -> Path:
+    """Đường dẫn .npy của một giọng. Gói runtime không còn tệp .pt nào."""
+    return (models / VOICES[voice]["filename"]).with_suffix(".npy")
 
 
 def reply(payload):
@@ -26,7 +52,7 @@ def main():
     tts = KokoroVietnameseONNX(
         voice="diem_trinh",
         onnx_path=models / "kokoro_vi.onnx",
-        voicepack_path=models / "voicepacks" / "diem_trinh.pt",
+        voicepack_path=voicepack_path(models, "diem_trinh"),
         config_path=models / "config.json",
     )
     for raw in sys.stdin:
@@ -37,7 +63,7 @@ def main():
             voice = request.get("voice", "diem_trinh")
             if voice not in VOICES or not isinstance(text, str) or not text.strip():
                 raise ValueError("Yêu cầu Kokoro không hợp lệ")
-            tts.voicepack = torch.load(models / VOICES[voice]["filename"], map_location="cpu", weights_only=True)
+            tts.voicepack = np.load(voicepack_path(models, voice))
             audio, _ = tts.synthesize(text, speed=float(request.get("speed", 1.0)))
             path = args.output_dir / f"{identifier}.wav"
             sf.write(path, audio, SAMPLE_RATE)
@@ -45,8 +71,8 @@ def main():
         except Exception as error:
             reply({"id": request.get("id", "?"), "error": str(error)})
 
-    # Một số bản PyTorch/ONNX trên macOS có thể đụng thứ tự huỷ mutex khi
-    # interpreter đóng. Toàn bộ response đã flush, nên thoát thẳng sau EOF.
+    # Một số bản ONNX trên macOS có thể đụng thứ tự huỷ mutex khi interpreter
+    # đóng. Toàn bộ response đã flush, nên thoát thẳng sau EOF.
     os._exit(0)
 
 
