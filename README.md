@@ -32,9 +32,9 @@ Nội dung có DRM thì không. Netflix, Apple TV+ và tương tự bị macOS c
 
 <div align="center">
 
-### [⬇️ Tải SubVoice 0.1.0](https://github.com/hoanganhuynh/subvoice/releases/download/v0.1.0/SubVoice-0.1.0.zip)
+### [⬇️ Tải SubVoice 0.1.1](https://github.com/hoanganhuynh/subvoice/releases/download/v0.1.1/SubVoice-0.1.1.zip)
 
-`SubVoice-0.1.0.zip` · 2,7 MB · macOS 14+ · Apple Silicon
+`SubVoice-0.1.1.zip` · 2,7 MB · macOS 14+ · Apple Silicon
 
 <sub>[Xem tất cả phiên bản](https://github.com/hoanganhuynh/subvoice/releases)</sub>
 
@@ -89,7 +89,7 @@ Hướng dẫn chi tiết kèm ảnh: [maclife.io.vn](https://maclife.io.vn/huon
 
 Cửa sổ chính đặt trạng thái và nút bật/tắt ở giữa. Ba thẻ dưới đáy cho biết đang đọc vùng nào, bằng giọng gì, và câu gần nhất vừa đọc là gì. Bấm vào thẻ nào thì mở phần đó ra.
 
-Có hai bộ đọc. Giọng hệ thống của macOS phản hồi trong khoảng 50 ms nên bám kịp phụ đề đang chạy. Kokoro nghe tự nhiên hơn nhiều nhưng chậm hơn, và phải tải thêm 680 MB. Đổi qua lại lúc nào cũng được trong Voice Studio, cùng chỗ để chỉnh tốc độ, âm lượng và nghe thử.
+Có hai bộ đọc. Giọng hệ thống của macOS phản hồi trong khoảng 50 ms nên bám kịp phụ đề đang chạy. Kokoro nghe tự nhiên hơn nhiều nhưng chậm hơn, và phải tải thêm 375 MB. Đổi qua lại lúc nào cũng được trong Voice Studio, cùng chỗ để chỉnh tốc độ, âm lượng và nghe thử.
 
 Phụ đề đứng yên thì app im lặng chứ không đọc đi đọc lại. Phụ đề hiện dần kiểu fade-in hay cảnh đổi nhanh vẫn xử lý được.
 
@@ -139,7 +139,7 @@ Model neural [Kokoro-Vietnamese](https://github.com/iamdinhthuan/Kokoro-Vietname
 
 Cài ngay trong app: Voice Studio, hoặc `Cài đặt → Chẩn đoán → Kokoro → Tải giọng Kokoro`.
 
-Gói nặng 680 MB vì đã gồm sẵn một bản Python relocatable, nên máy bạn không cần cài Python. App đối chiếu SHA-256 trước khi cài. Cài xong thì 14 giọng xuất hiện ngay, không phải khởi động lại. Trong lúc tải app vẫn dùng bình thường, và thoát giữa chừng thì lần sau tải tiếp.
+Gói nặng 375 MB vì đã gồm sẵn một bản Python relocatable, nên máy bạn không cần cài Python. App đối chiếu SHA-256 trước khi cài. Cài xong thì 14 giọng xuất hiện ngay, không phải khởi động lại. Trong lúc tải app vẫn dùng bình thường, và thoát giữa chừng thì lần sau tải tiếp.
 
 Năm mức tốc độ ánh xạ sang dải 0,65× tới 1,55×. Thay đổi có hiệu lực từ câu kế tiếp.
 
@@ -188,7 +188,7 @@ open ~/Applications/SubVoice.app
 Dành cho người bảo trì.
 
 ```bash
-./Scripts/package-kokoro.sh 1.0.0
+./Scripts/package-kokoro.sh 1.0.1
 ```
 
 Script dựng CPython relocatable, cài dependency bằng `pip install --target` chứ không dùng venv, tải model, convert voicepack sang `.npy`, rồi cắt bỏ stack PyTorch. Trước khi nén nó chạy self-test dưới `env -i`; self-test hỏng thì archive không được tạo ra.

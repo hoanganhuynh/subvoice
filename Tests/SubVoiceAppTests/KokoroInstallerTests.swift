@@ -40,10 +40,11 @@ struct KokoroInstallerTests {
             )
             try marker.write(to: file, atomically: true, encoding: .utf8)
         }
-        let archive = directory.appendingPathComponent("runtime.tar.zst")
+        let archive = directory.appendingPathComponent("runtime.tar.gz")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
-        process.arguments = ["--zstd", "-cf", archive.path, "-C", stage.path, "."]
+        process.arguments = ["-czf", archive.path, "-C", stage.path, "."]
+        process.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin"]
         try process.run()
         process.waitUntilExit()
         try #require(process.terminationStatus == 0)
@@ -145,7 +146,7 @@ struct KokoroInstallerTests {
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let installer = installer(
-            for: directory.appendingPathComponent("khong-ton-tai.tar.zst"),
+            for: directory.appendingPathComponent("khong-ton-tai.tar.gz"),
             sha256: String(repeating: "0", count: 64),
             applicationSupport: directory
         )
@@ -170,7 +171,7 @@ struct KokoroInstallerTests {
         let installer = KokoroInstaller(
             package: KokoroPackage(
                 version: "test",
-                downloadURL: URL(string: "https://subvoice.invalid/kokoro.tar.zst")!,
+                downloadURL: URL(string: "https://subvoice.invalid/kokoro.tar.gz")!,
                 sha256: String(repeating: "0", count: 64),
                 downloadBytes: 1
             ),

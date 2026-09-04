@@ -141,7 +141,7 @@ extension KokoroPackage {
         downloadedArchive archive: URL,
         into layout: KokoroInstallLayout,
         fileManager: FileManager = .default,
-        extract: (URL, URL) throws -> Void = KokoroPackage.extractTarZstd(archive:destination:),
+        extract: (URL, URL) throws -> Void = KokoroPackage.extractTar(archive:destination:),
         onPhase: (KokoroInstallPhase) -> Void = { _ in }
     ) throws {
         try Self.healInterruptedSwap(layout, fileManager: fileManager)
@@ -226,11 +226,20 @@ extension KokoroPackage {
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
-    /// macOS có sẵn bsdtar hỗ trợ zstd, nên không cần thư viện giải nén nào.
-    public static func extractTarZstd(archive: URL, destination: URL) throws {
+    /// Giải nén bằng bsdtar sẵn có của macOS.
+    ///
+    /// KHÔNG truyền cờ định dạng: `-xf` để libarchive tự nhận dạng, và nó chỉ
+    /// xử lý nội bộ được gzip, xz, bzip2. Với zstd bsdtar phải gọi chương trình
+    /// `zstd` bên ngoài — thứ macOS không có sẵn, và app mở từ Finder cũng
+    /// không thấy bản Homebrew vì PATH chỉ có /usr/bin:/bin:/usr/sbin:/sbin.
+    /// Bản 1.0.0 nén bằng zstd nên hỏng đúng chỗ này trên máy người dùng.
+    public static func extractTar(archive: URL, destination: URL) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
-        process.arguments = ["--zstd", "-xf", archive.path, "-C", destination.path]
+        process.arguments = ["-xf", archive.path, "-C", destination.path]
+        // PATH tối thiểu và cố định: quá trình giải nén không được phép phụ
+        // thuộc vào thứ gì người dùng cài thêm.
+        process.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin"]
         let errors = Pipe()
         process.standardError = errors
         try process.run()
@@ -257,12 +266,12 @@ extension KokoroPackage {
     /// đẩy archive lên GitHub Release trùng tag. Sai SHA thì `install` từ chối
     /// gói — hỏng theo hướng an toàn, nhưng người dùng sẽ không tài nào cài được.
     public static let current = KokoroPackage(
-        version: "1.0.0",
+        version: "1.0.1",
         downloadURL: URL(
             string: "https://github.com/hoanganhuynh/subvoice/releases/download"
-                + "/kokoro-runtime-1.0.0/kokoro-runtime-1.0.0-arm64.tar.zst"
+                + "/kokoro-runtime-1.0.1/kokoro-runtime-1.0.1-arm64.tar.gz"
         )!,
-        sha256: "3fe41bfb676b78270eae964546bdc17c17c9bc5d4219af9e0fff906ee0ffec5d",
-        downloadBytes: 713_391_114
+        sha256: "1bd8ac3dd21186b07f638bdaf5c4668397e8bc40786bb7abdf3508054505aa97",
+        downloadBytes: 393_540_951
     )
 }

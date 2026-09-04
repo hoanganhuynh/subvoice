@@ -40,7 +40,7 @@ struct KokoroPackageTests {
         }
     }
 
-    /// Dựng một archive tar.zst thật trong thư mục tạm, giống hệt cái mà
+    /// Dựng một archive tar.gz thật trong thư mục tạm, giống hệt cái mà
     /// Scripts/package-kokoro.sh tạo ra: không có thư mục bọc ngoài.
     private func makeArchive(
         in directory: URL,
@@ -60,10 +60,14 @@ struct KokoroPackageTests {
             try marker.write(to: file, atomically: true, encoding: .utf8)
         }
 
-        let archive = directory.appendingPathComponent("runtime-\(UUID().uuidString).tar.zst")
+        let archive = directory.appendingPathComponent("runtime-\(UUID().uuidString).tar.gz")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
-        process.arguments = ["--zstd", "-cf", archive.path, "-C", stage.path, "."]
+        process.arguments = ["-czf", archive.path, "-C", stage.path, "."]
+        // Tạo fixture dưới đúng PATH mà app mở từ Finder có. Nếu ai đó đổi định
+        // dạng gói sang thứ bsdtar phải gọi chương trình ngoài, như zstd, bước
+        // này hỏng ngay tại đây thay vì hỏng trên máy người dùng.
+        process.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin"]
         try process.run()
         process.waitUntilExit()
         try #require(process.terminationStatus == 0)
@@ -89,7 +93,7 @@ struct KokoroPackageTests {
     ) -> KokoroPackage {
         KokoroPackage(
             version: version,
-            downloadURL: URL(string: "https://example.invalid/runtime.tar.zst")!,
+            downloadURL: URL(string: "https://example.invalid/runtime.tar.gz")!,
             sha256: sha256,
             downloadBytes: downloadBytes
         )
@@ -299,7 +303,7 @@ struct KokoroPackageTests {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
 
-        let notAnArchive = directory.appendingPathComponent("runtime.tar.zst")
+        let notAnArchive = directory.appendingPathComponent("runtime.tar.gz")
         try "rác".write(to: notAnArchive, atomically: true, encoding: .utf8)
         let layout = KokoroInstallLayout(applicationSupport: directory)
 
@@ -452,12 +456,14 @@ struct KokoroPackageConstantsTests {
     /// Dán thiếu hoặc dán nhầm chỗ là app không bao giờ cài được Kokoro.
     @Test func currentPackageIsFullyFilledIn() {
         let package = KokoroPackage.current
-        #expect(package.version == "1.0.0")
+        #expect(package.version == "1.0.1")
         #expect(package.sha256.count == 64)
         let isHex = package.sha256.allSatisfy { $0.isHexDigit }
         #expect(isHex)
         #expect(package.downloadBytes > 100_000_000)
-        #expect(package.downloadURL.absoluteString.hasSuffix(".tar.zst"))
+        // Định dạng phải là thứ bsdtar xử lý nội bộ. zstd cần chương trình
+        // ngoài mà macOS không có, và bản 1.0.0 đã hỏng vì chuyện đó.
+        #expect(package.downloadURL.absoluteString.hasSuffix(".tar.gz"))
         #expect(package.downloadURL.absoluteString.contains(package.version))
     }
 }

@@ -142,7 +142,7 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
         // `location` bị xoá ngay khi callback trả về, nên phải chuyển đi trước
         // khi nhảy sang main actor.
         let staged = FileManager.default.temporaryDirectory
-            .appendingPathComponent("kokoro-download-\(UUID().uuidString).tar.zst")
+            .appendingPathComponent("kokoro-download-\(UUID().uuidString).tar.gz")
         do {
             try FileManager.default.moveItem(at: location, to: staged)
         } catch {
