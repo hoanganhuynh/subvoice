@@ -22,6 +22,22 @@ public enum Geometry {
         )
     }
 
+    /// Đường ngược cho việc đối chiếu với danh sách cửa sổ.
+    ///
+    /// - Parameters:
+    ///   - displayLocalRect: vùng ở hệ cục bộ của display, gốc trên-trái —
+    ///     đúng dạng `SelectedRegion.rect` đang lưu.
+    ///   - displayBounds: `CGDisplayBounds` của chính display đó. Giá trị này
+    ///     ĐÃ ở hệ toàn cục gốc trên-trái, cùng hệ mà `kCGWindowBounds` dùng,
+    ///     nên phép chuyển chỉ là cộng gốc của display. Không đụng `NSScreen`,
+    ///     không phải lật trục y.
+    public static func toGlobalTopLeft(
+        displayLocalRect: CGRect,
+        displayBounds: CGRect
+    ) -> CGRect {
+        displayLocalRect.offsetBy(dx: displayBounds.minX, dy: displayBounds.minY)
+    }
+
     /// Cắt vùng cho nằm gọn trong display. Trả về nil nếu phần còn lại quá nhỏ để dùng.
     public static func clamped(_ rect: CGRect, toDisplaySize size: CGSize) -> CGRect? {
         let bounds = CGRect(origin: .zero, size: size)
