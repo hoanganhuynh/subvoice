@@ -55,3 +55,33 @@ import CoreGraphics
 
     #expect(Geometry.clamped(outside, toDisplaySize: size) == nil)
 }
+
+@Test func convertsDisplayLocalRectToGlobalTopLeftOnPrimaryDisplay() {
+    // CGDisplayBounds của màn hình chính luôn có gốc (0, 0).
+    let bounds = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+    let local = CGRect(x: 100, y: 120, width: 400, height: 60)
+
+    let global = Geometry.toGlobalTopLeft(displayLocalRect: local, displayBounds: bounds)
+
+    #expect(global == CGRect(x: 100, y: 120, width: 400, height: 60))
+}
+
+@Test func convertsDisplayLocalRectToGlobalTopLeftOnSecondaryDisplay() {
+    // Màn hình phụ đặt bên PHẢI màn hình chính, trong hệ CGDisplayBounds.
+    let bounds = CGRect(x: 1920, y: 0, width: 2560, height: 1440)
+    let local = CGRect(x: 100, y: 1300, width: 400, height: 60)
+
+    let global = Geometry.toGlobalTopLeft(displayLocalRect: local, displayBounds: bounds)
+
+    #expect(global == CGRect(x: 2020, y: 1300, width: 400, height: 60))
+}
+
+@Test func convertsDisplayLocalRectOnDisplayAbovePrimary() {
+    // Phía TRÊN màn hình chính -> y âm trong hệ CGDisplayBounds.
+    let bounds = CGRect(x: 0, y: -1440, width: 2560, height: 1440)
+    let local = CGRect(x: 50, y: 1380, width: 400, height: 60)
+
+    let global = Geometry.toGlobalTopLeft(displayLocalRect: local, displayBounds: bounds)
+
+    #expect(global == CGRect(x: 50, y: -60, width: 400, height: 60))
+}

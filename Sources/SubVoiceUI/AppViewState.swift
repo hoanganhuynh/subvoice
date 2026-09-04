@@ -23,6 +23,9 @@ public enum AppRunState: Equatable, Sendable {
     case stopped
     case listening
     case speaking
+    /// Vẫn đang bắt màn hình, nhưng cửa sổ chủ của vùng đọc đã khuất nên không
+    /// phát hiện chữ nữa.
+    case paused(RegionPauseReason)
     case warning(AppWarning)
 }
 
@@ -88,7 +91,7 @@ public struct AppViewState: Equatable, Sendable {
 
     public var isCapturing: Bool {
         switch runState {
-        case .listening, .speaking: return true
+        case .listening, .speaking, .paused: return true
         case .stopped, .warning: return false
         }
     }
@@ -107,6 +110,8 @@ public enum AppIntent: Equatable, Sendable {
     case copyTranscript([UUID])
     case setTheme(ThemeMode)
     case setLaunchAtLogin(Bool)
+    case setPauseWhenWindowInactive(Bool)
+    case setPauseOnWindowTitleChange(Bool)
     case downloadKokoro
     case cancelKokoroDownload
     case finishOnboarding

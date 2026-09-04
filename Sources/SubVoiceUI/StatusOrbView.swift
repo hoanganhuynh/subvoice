@@ -19,6 +19,7 @@ struct StatusOrbView: View {
         switch runState {
         case .stopped: theme.accent
         case .listening, .speaking: theme.status
+        case .paused: theme.secondaryText
         case .warning: theme.warning
         }
     }
@@ -28,6 +29,7 @@ struct StatusOrbView: View {
         case .stopped: "Trạng thái: đang dừng"
         case .listening: "Trạng thái: đang nghe"
         case .speaking: "Trạng thái: đang đọc"
+        case .paused: "Trạng thái: tạm dừng. \(content.detail)"
         case .warning(let warning): "Trạng thái: cảnh báo. \(warning.message)"
         }
     }
@@ -35,7 +37,7 @@ struct StatusOrbView: View {
     private var isActive: Bool {
         switch runState {
         case .listening, .speaking: true
-        case .stopped, .warning: false
+        case .stopped, .paused, .warning: false
         }
     }
 

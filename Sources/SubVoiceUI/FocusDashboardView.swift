@@ -103,6 +103,7 @@ private struct TopBar: View {
         case .stopped: "Đang dừng"
         case .listening: "Đang nghe"
         case .speaking: "Đang đọc"
+        case .paused: "Tạm dừng"
         case .warning: "Cần xử lý"
         }
     }
@@ -112,6 +113,7 @@ private struct TopBar: View {
         case .stopped: "pause.circle"
         case .listening: "waveform"
         case .speaking: "speaker.wave.2.fill"
+        case .paused: "pause.circle.fill"
         case .warning: "exclamationmark.triangle.fill"
         }
     }
@@ -120,6 +122,7 @@ private struct TopBar: View {
         switch state.runState {
         case .stopped: theme.secondaryText
         case .listening, .speaking: theme.status
+        case .paused: theme.secondaryText
         case .warning: theme.warning
         }
     }

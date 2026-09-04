@@ -43,4 +43,31 @@ struct SettingsTests {
         let encoded = try JSONEncoder().encode(settings)
         #expect(try JSONDecoder().decode(Settings.self, from: encoded).hasCompletedOnboarding)
     }
+
+    @Test func windowPauseTogglesDefaultToOn() {
+        let settings = Settings()
+        #expect(settings.pauseWhenWindowInactive)
+        #expect(settings.pauseOnWindowTitleChange)
+    }
+
+    @Test func oldPayloadWithoutWindowPauseTogglesDefaultsToOn() throws {
+        let data = Data(#"{"storedRate":0.55,"storedVolume":1}"#.utf8)
+        let settings = try JSONDecoder().decode(Settings.self, from: data)
+        #expect(settings.pauseWhenWindowInactive)
+        #expect(settings.pauseOnWindowTitleChange)
+    }
+
+    @Test func windowPauseTogglesSurviveARoundTrip() throws {
+        var settings = Settings()
+        settings.pauseWhenWindowInactive = false
+        settings.pauseOnWindowTitleChange = false
+
+        let restored = try JSONDecoder().decode(
+            Settings.self,
+            from: JSONEncoder().encode(settings)
+        )
+
+        #expect(restored.pauseWhenWindowInactive == false)
+        #expect(restored.pauseOnWindowTitleChange == false)
+    }
 }

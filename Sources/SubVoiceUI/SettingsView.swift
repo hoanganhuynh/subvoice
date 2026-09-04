@@ -37,6 +37,34 @@ struct SettingsView: View {
                         }
                     }
 
+                    section("Vùng đọc") {
+                        Toggle(
+                            "Chỉ đọc khi cửa sổ gốc đang hiện",
+                            isOn: Binding(
+                                get: { state.settings.pauseWhenWindowInactive },
+                                set: { viewModel.send(.setPauseWhenWindowInactive($0)) }
+                            )
+                        )
+                        .toggleStyle(.switch)
+
+                        Toggle(
+                            "Dừng khi tiêu đề cửa sổ đổi",
+                            isOn: Binding(
+                                get: { state.settings.pauseOnWindowTitleChange },
+                                set: { viewModel.send(.setPauseOnWindowTitleChange($0)) }
+                            )
+                        )
+                        .toggleStyle(.switch)
+                        .disabled(!state.settings.pauseWhenWindowInactive)
+
+                        Text("Vùng đọc nhớ cửa sổ đã sinh ra nó và ngưng đọc khi "
+                            + "cửa sổ đó bị che hoặc đổi nội dung. Khoanh lại vùng "
+                            + "để gắn với cửa sổ khác.")
+                            .font(.footnote)
+                            .foregroundStyle(theme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
                     section("Chẩn đoán") {
                         DiagnosticRow(
                             symbolName: "record.circle",
