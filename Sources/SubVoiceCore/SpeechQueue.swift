@@ -32,6 +32,16 @@ public struct SpeechQueue {
         return pending.removeFirst()
     }
 
+    /// Bỏ những câu còn nằm chờ, giữ nguyên câu đang phát dở.
+    ///
+    /// Dùng khi cửa sổ chủ của vùng đọc vừa khuất: các câu chờ được bắt trong
+    /// vài giây trước đó, mà việc phát hiện khuất chậm nhất một vòng poll, nên
+    /// không thể chắc câu nào còn là phụ đề thật. Người dùng cũng vừa nhìn đi
+    /// chỗ khác, đọc nốt cả hàng đợi chỉ làm app có vẻ hỏng.
+    public mutating func dropPending() {
+        pending.removeAll()
+    }
+
     public mutating func reset() {
         pending.removeAll()
         speaking = false

@@ -642,6 +642,10 @@ final class AppCoordinator {
         switch verdict {
         case .paused(let reason):
             setWindowPaused(true)
+            // Câu đang phát dở vẫn đọc hết, nhưng cả hàng đợi phía sau thì bỏ:
+            // chúng được bắt ngay trước lúc khuất nên không chắc còn là phụ đề,
+            // và người dùng cũng vừa nhìn đi chỗ khác.
+            speechQueue.dropPending()
             publishSnapshot(runState: .paused(reason))
         case .active:
             setWindowPaused(false)
@@ -766,6 +770,16 @@ final class AppCoordinator {
 
     private func handleText(_ text: String) {
         guard isRunning, !isSelectingRegion else { return }
+
+        // OCR chạy bất đồng bộ: khung hình vào lúc chưa khuất, chữ ra lúc đã
+        // khuất. Xét lại ngay tại đây rồi mới quyết, thay vì tin vào kết luận
+        // của vòng poll gần nhất — nếu không, mỗi lần cửa sổ bị che vẫn lọt ra
+        // loa một câu không liên quan.
+        windowWatcher.refreshNow()
+        guard !windowPaused() else {
+            if tracing { TraceLog.shared.write("  bo=cua-so-khuat \"\(text)\"") }
+            return
+        }
 
         if tracing { TraceLog.shared.write("ocr       \"\(text)\"") }
 

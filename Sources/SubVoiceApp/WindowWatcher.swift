@@ -60,6 +60,17 @@ final class WindowWatcher {
         lastVerdict = .active
     }
 
+    /// Xét lại NGAY, không chờ vòng poll kế tiếp.
+    ///
+    /// Dùng ở đúng khoảnh khắc sắp đọc một câu lên. Vòng poll 0.4 giây là đủ
+    /// để giao diện phản ứng, nhưng không đủ để bảo đảm câu sắp phát ra loa
+    /// thật sự đến từ cửa sổ gốc — OCR chạy bất đồng bộ nên chữ có thể tới sau
+    /// khi cửa sổ đã khuất. Một lần đọc danh sách cửa sổ tốn cỡ một mili giây,
+    /// và chỉ chạy khi OCR ra chữ, nên rẻ hơn nhiều so với poll dày hơn.
+    func refreshNow() {
+        evaluate()
+    }
+
     private func evaluate() {
         guard let owner else { return }
 

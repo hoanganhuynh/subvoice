@@ -73,3 +73,28 @@ import Testing
     #expect(!queue.isSpeaking)
     #expect(queue.enqueue("câu mới") == "câu mới")
 }
+
+@Test func dropPendingClearsTheBacklogButKeepsTheSentenceBeingSpoken() {
+    var queue = SpeechQueue()
+    _ = queue.enqueue("đang đọc")
+    _ = queue.enqueue("chờ một")
+    _ = queue.enqueue("chờ hai")
+
+    queue.dropPending()
+
+    // Câu đang phát dở vẫn được đọc hết, nên hàng đợi vẫn ở trạng thái "đang đọc".
+    #expect(queue.isSpeaking)
+    #expect(queue.pendingCount == 0)
+    // Backend báo xong câu đang đọc -> không còn gì để đọc tiếp.
+    #expect(queue.finished() == nil)
+    #expect(!queue.isSpeaking)
+}
+
+@Test func dropPendingOnAnIdleQueueChangesNothing() {
+    var queue = SpeechQueue()
+    queue.dropPending()
+
+    #expect(!queue.isSpeaking)
+    #expect(queue.pendingCount == 0)
+    #expect(queue.enqueue("câu mới") == "câu mới")
+}
