@@ -93,6 +93,10 @@ Có hai bộ đọc. Giọng hệ thống của macOS phản hồi trong khoản
 
 Phụ đề đứng yên thì app im lặng chứ không đọc đi đọc lại. Phụ đề hiện dần kiểu fade-in hay cảnh đổi nhanh vẫn xử lý được.
 
+Vùng đọc nhớ cửa sổ đã sinh ra nó. Khi cửa sổ đó bị cửa sổ khác che, bị thu nhỏ, bị kéo đi hoặc đổi sang tab khác, SubVoice ngưng phát hiện chữ và nói rõ lý do, rồi tự đọc lại khi cửa sổ trở về như cũ. Mở một app khác ở góc màn hình mà nó không che vùng phụ đề thì app vẫn đọc bình thường.
+
+Tắt được ở Cài đặt bằng "Chỉ đọc khi cửa sổ gốc đang hiện". Trang web tự đổi tiêu đề của nó — Netflix sang tập mới chẳng hạn — có thể bị tính là đổi nội dung; lúc đó tắt riêng "Dừng khi tiêu đề cửa sổ đổi". Vùng đã khoanh từ bản cũ không có thông tin cửa sổ nên vẫn đọc liên tục như trước; khoanh lại vùng để gắn nó với cửa sổ hiện tại.
+
 Lịch sử phiên giữ tối đa 200 câu để bạn tìm lại hoặc sao chép. Nó nằm trong bộ nhớ và mất khi bạn thoát app.
 
 Phím tắt toàn cục chạy cả khi video đang toàn màn hình ở app khác. Mục chẩn đoán trong Cài đặt kiểm tra quyền Screen Recording, giọng hệ thống và tình trạng Kokoro, mỗi mục kèm nút xử lý nếu thiếu.
