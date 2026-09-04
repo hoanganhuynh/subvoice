@@ -20,6 +20,8 @@ public struct Settings: Codable, Equatable, Sendable {
     private var storedKokoroVoiceIdentifier = "diem_trinh"
     private var storedThemeMode: ThemeMode = .system
     private var storedHasCompletedOnboarding = false
+    private var storedPauseWhenWindowInactive = true
+    private var storedPauseOnWindowTitleChange = true
 
     public init() {}
 
@@ -31,6 +33,8 @@ public struct Settings: Codable, Equatable, Sendable {
         case storedKokoroVoiceIdentifier
         case storedThemeMode
         case storedHasCompletedOnboarding
+        case storedPauseWhenWindowInactive
+        case storedPauseOnWindowTitleChange
     }
 
     public init(from decoder: Decoder) throws {
@@ -61,6 +65,16 @@ public struct Settings: Codable, Equatable, Sendable {
             Bool.self,
             forKey: .storedHasCompletedOnboarding
         ) ?? false
+        // Người dùng nâng cấp app không thấy hành vi đổi ngay: vùng đã lưu của
+        // họ có `owner == nil` nên vẫn đọc liên tục cho tới khi khoanh lại vùng.
+        pauseWhenWindowInactive = try values.decodeIfPresent(
+            Bool.self,
+            forKey: .storedPauseWhenWindowInactive
+        ) ?? true
+        pauseOnWindowTitleChange = try values.decodeIfPresent(
+            Bool.self,
+            forKey: .storedPauseOnWindowTitleChange
+        ) ?? true
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -72,6 +86,8 @@ public struct Settings: Codable, Equatable, Sendable {
         try values.encode(storedKokoroVoiceIdentifier, forKey: .storedKokoroVoiceIdentifier)
         try values.encode(storedThemeMode, forKey: .storedThemeMode)
         try values.encode(storedHasCompletedOnboarding, forKey: .storedHasCompletedOnboarding)
+        try values.encode(storedPauseWhenWindowInactive, forKey: .storedPauseWhenWindowInactive)
+        try values.encode(storedPauseOnWindowTitleChange, forKey: .storedPauseOnWindowTitleChange)
     }
 
     public var speechRate: Float {
@@ -109,5 +125,18 @@ public struct Settings: Codable, Equatable, Sendable {
     public var hasCompletedOnboarding: Bool {
         get { storedHasCompletedOnboarding }
         set { storedHasCompletedOnboarding = newValue }
+    }
+
+    /// Ngưng phát hiện chữ khi cửa sổ đã sinh ra vùng đọc không còn hiện.
+    public var pauseWhenWindowInactive: Bool {
+        get { storedPauseWhenWindowInactive }
+        set { storedPauseWhenWindowInactive = newValue }
+    }
+
+    /// Coi việc cửa sổ đổi tiêu đề là đổi nội dung. Chỉ có tác dụng khi
+    /// `pauseWhenWindowInactive` đang bật.
+    public var pauseOnWindowTitleChange: Bool {
+        get { storedPauseOnWindowTitleChange }
+        set { storedPauseOnWindowTitleChange = newValue }
     }
 }
