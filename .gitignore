@@ -5,3 +5,9 @@ build/
 SubVoice.app/
 DerivedData/
 .DS_Store
+__pycache__/
+*.pyc
+
+# Bản checkout, runtime và weights TTS dùng để thử cục bộ; không đóng gói hay
+# commit vào app SwiftPM hiện tại.
+ThirdParty/Kokoro-Vietnamese/
