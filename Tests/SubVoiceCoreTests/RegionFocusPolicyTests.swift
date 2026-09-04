@@ -219,4 +219,99 @@ struct RegionFocusPolicyTests {
             ) == .paused(.windowCovered("Google Chrome"))
         )
     }
+
+    @Test func reanchorMatchesByTitleEvenWhenTheNumberChanged() {
+        let anchored = RegionFocusPolicy.reanchor(
+            owner: Self.owner(number: 1111),
+            regionGlobalRect: Self.region,
+            windows: [Self.chrome(number: 5555, title: "Phim hay")],
+            ownBundleIdentifier: Self.ownBundle
+        )
+
+        #expect(anchored?.windowNumber == 5555)
+        #expect(anchored?.windowTitle == "Phim hay")
+    }
+
+    @Test func reanchorFallsBackToTheWindowContainingTheRegion() {
+        let anchored = RegionFocusPolicy.reanchor(
+            owner: Self.owner(number: 1111, title: "Tên cũ"),
+            regionGlobalRect: Self.region,
+            windows: [Self.chrome(number: 5555, title: "Tên mới")],
+            ownBundleIdentifier: Self.ownBundle
+        )
+
+        #expect(anchored?.windowNumber == 5555)
+        // Đi đường dự phòng thì tiêu đề cũ đã vô nghĩa, phải lấy lại tiêu đề
+        // đang có, nếu không luật tiêu đề sẽ dừng ngay lập tức.
+        #expect(anchored?.windowTitle == "Tên mới")
+    }
+
+    @Test func reanchorReturnsNilWhenTheAppIsNotRunning() {
+        #expect(
+            RegionFocusPolicy.reanchor(
+                owner: Self.owner(),
+                regionGlobalRect: Self.region,
+                windows: [Self.overlay(frame: Self.chromeFrame)],
+                ownBundleIdentifier: Self.ownBundle
+            ) == nil
+        )
+    }
+
+    @Test func reanchorIgnoresWindowsThatDoNotHoldTheRegion() {
+        let small = Self.chrome(
+            number: 5555,
+            title: "Tên mới",
+            frame: CGRect(x: 0, y: 0, width: 400, height: 300)
+        )
+        #expect(
+            RegionFocusPolicy.reanchor(
+                owner: Self.owner(number: 1111, title: "Tên cũ"),
+                regionGlobalRect: Self.region,
+                windows: [small],
+                ownBundleIdentifier: Self.ownBundle
+            ) == nil
+        )
+    }
+
+    @Test func ownerLookupPicksTheFrontmostWindowHoldingTheWholeRegion() {
+        let owner = RegionFocusPolicy.owner(
+            forGlobalRect: Self.region,
+            windows: [
+                Self.overlay(frame: CGRect(x: 0, y: 0, width: 400, height: 300)),
+                Self.chrome(),
+            ],
+            ownBundleIdentifier: Self.ownBundle
+        )
+
+        #expect(owner?.bundleIdentifier == "com.google.Chrome")
+        #expect(owner?.applicationName == "Google Chrome")
+        #expect(owner?.windowNumber == 7788)
+        #expect(owner?.windowTitle == "Phim hay")
+    }
+
+    @Test func ownerLookupSkipsSubVoiceOwnWindows() {
+        let ourOverlay = Self.overlay(
+            bundleIdentifier: Self.ownBundle,
+            applicationName: "SubVoice",
+            frame: Self.chromeFrame
+        )
+        let owner = RegionFocusPolicy.owner(
+            forGlobalRect: Self.region,
+            windows: [ourOverlay, Self.chrome()],
+            ownBundleIdentifier: Self.ownBundle
+        )
+
+        #expect(owner?.bundleIdentifier == "com.google.Chrome")
+    }
+
+    @Test func ownerLookupReturnsNilWhenTheRegionSpillsOutsideEveryWindow() {
+        let small = Self.chrome(frame: CGRect(x: 0, y: 0, width: 800, height: 950))
+        #expect(
+            RegionFocusPolicy.owner(
+                forGlobalRect: Self.region,
+                windows: [small],
+                ownBundleIdentifier: Self.ownBundle
+            ) == nil
+        )
+    }
 }

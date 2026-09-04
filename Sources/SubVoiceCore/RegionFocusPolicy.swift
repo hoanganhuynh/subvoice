@@ -72,4 +72,68 @@ public enum RegionFocusPolicy {
 
         return .active
     }
+
+    /// Tìm lại cửa sổ chủ ở đầu mỗi phiên đọc, vì số hiệu cửa sổ đã lưu không
+    /// sống qua lần khởi động lại của app đích.
+    ///
+    /// - Returns: `owner` với số hiệu mới, hoặc `nil` khi không tìm được — lúc
+    ///   đó phiên này chạy không khoá cửa sổ.
+    public static func reanchor(
+        owner: RegionOwner,
+        regionGlobalRect: CGRect,
+        windows: [WindowSnapshot],
+        ownBundleIdentifier: String?
+    ) -> RegionOwner? {
+        let candidates = windows.filter {
+            $0.bundleIdentifier == owner.bundleIdentifier
+                && $0.layer == 0
+                && $0.alpha > 0
+                && (ownBundleIdentifier == nil || $0.bundleIdentifier != ownBundleIdentifier)
+        }
+
+        if let title = owner.windowTitle,
+           let match = candidates.first(where: {
+               RegionOwner.normalizedTitle($0.title) == title
+           }) {
+            var anchored = owner
+            anchored.windowNumber = match.windowNumber
+            return anchored
+        }
+
+        guard let fallback = candidates.first(where: {
+            $0.frame.contains(regionGlobalRect)
+        }) else { return nil }
+
+        // Tiêu đề cũ đã vô nghĩa ở đường này. Không lấy lại tiêu đề đang có thì
+        // luật tiêu đề sẽ tạm dừng ngay từ vòng xét đầu tiên.
+        var anchored = owner
+        anchored.windowNumber = fallback.windowNumber
+        anchored.windowTitle = RegionOwner.normalizedTitle(fallback.title)
+        return anchored
+    }
+
+    /// Cửa sổ nào đã sinh ra vùng vừa khoanh.
+    ///
+    /// Đòi khung cửa sổ chứa TRỌN vùng, đúng bằng điều kiện mà `evaluate` dùng.
+    /// Nếu ở đây chỉ đòi chứa tâm vùng thì một vùng khoanh tràn mép sẽ nhận chủ
+    /// rồi bị `evaluate` cho tạm dừng ngay và không đọc được câu nào.
+    public static func owner(
+        forGlobalRect rect: CGRect,
+        windows: [WindowSnapshot],
+        ownBundleIdentifier: String?
+    ) -> RegionOwner? {
+        guard let window = windows.first(where: {
+            $0.layer == 0
+                && $0.alpha > 0
+                && (ownBundleIdentifier == nil || $0.bundleIdentifier != ownBundleIdentifier)
+                && $0.frame.contains(rect)
+        }), let bundleIdentifier = window.bundleIdentifier else { return nil }
+
+        return RegionOwner(
+            bundleIdentifier: bundleIdentifier,
+            applicationName: window.applicationName ?? bundleIdentifier,
+            windowNumber: window.windowNumber,
+            windowTitle: RegionOwner.normalizedTitle(window.title)
+        )
+    }
 }
