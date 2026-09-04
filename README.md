@@ -42,6 +42,44 @@ Hoạt động với **mọi nguồn**: Netflix, YouTube, trình phát cục b�
 
 Giải nén rồi kéo `SubVoice.app` vào thư mục **Applications**. Mở app, một hướng dẫn 5 bước sẽ đưa bạn qua phần cấp quyền và chọn vùng phụ đề.
 
+> [!WARNING]
+> SubVoice chưa được Apple notarize, nên lần đầu mở macOS sẽ báo *"không thể mở vì không xác minh được nhà phát triển"*. Đó là cảnh báo về chữ ký, không phải app có vấn đề.
+
+<details>
+<summary><b>Cách mở app lần đầu</b> — chọn một trong ba, xếp từ nhẹ tới nặng</summary>
+
+<br>
+
+**Cách 1 — Control-click** *(khuyến nghị)*
+
+Nhấn giữ <kbd>Control</kbd> rồi bấm vào `SubVoice.app` → chọn **Open** → bấm **Open** lần nữa trong hộp thoại hiện ra.
+
+Chỉ làm một lần duy nhất, và chỉ áp dụng cho riêng app này. Không đụng gì tới phần còn lại của máy.
+
+**Cách 2 — Gỡ cờ quarantine cho riêng SubVoice**
+
+```bash
+xattr -dr com.apple.quarantine /Applications/SubVoice.app
+```
+
+Cũng chỉ tác động lên một app, dùng khi cách 1 không hiện tuỳ chọn Open.
+
+**Cách 3 — Tắt Gatekeeper toàn hệ thống**
+
+```bash
+sudo spctl --master-disable
+```
+
+Cách này tắt kiểm tra cho **mọi app bạn tải về sau này**, không riêng SubVoice. Chỉ nên dùng nếu bạn thật sự cần cài nhiều app ngoài App Store — và nhớ bật lại khi xong:
+
+```bash
+sudo spctl --master-enable
+```
+
+Hướng dẫn chi tiết kèm ảnh: [maclife.io.vn](https://maclife.io.vn/huong-dan-tat-gatekeeper-tren-macbook/)
+
+</details>
+
 > [!IMPORTANT]
 > Ở bước cấp quyền **Screen Recording**, sau khi bật trong System Settings bạn phải **thoát SubVoice rồi mở lại**. macOS chỉ áp dụng quyền này ở lần khởi động kế tiếp — app không tự làm được, và đây không phải lỗi.
 
