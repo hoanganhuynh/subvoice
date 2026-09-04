@@ -108,4 +108,66 @@ struct RegionFocusPolicyTests {
     @Test func frontmostOwnerWindowReads() {
         #expect(Self.verdict(owner: Self.owner(), windows: [Self.chrome()]) == .active)
     }
+
+    static func overlay(
+        bundleIdentifier: String? = "com.tinyspeck.slackmacgap",
+        applicationName: String? = "Slack",
+        frame: CGRect,
+        layer: Int = 0,
+        alpha: CGFloat = 1
+    ) -> WindowSnapshot {
+        WindowSnapshot(
+            windowNumber: 4242,
+            bundleIdentifier: bundleIdentifier,
+            applicationName: applicationName,
+            title: "Slack",
+            frame: frame,
+            layer: layer,
+            alpha: alpha
+        )
+    }
+
+    @Test func windowInFrontCoveringTheRegionPauses() {
+        let slack = Self.overlay(frame: CGRect(x: 300, y: 850, width: 900, height: 400))
+        #expect(
+            Self.verdict(owner: Self.owner(), windows: [slack, Self.chrome()])
+                == .paused(.windowCovered("Google Chrome"))
+        )
+    }
+
+    @Test func windowInFrontThatMissesTheRegionReads() {
+        // Slack nằm góc trên bên trái, không chạm dải phụ đề ở đáy.
+        let slack = Self.overlay(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
+        #expect(Self.verdict(owner: Self.owner(), windows: [slack, Self.chrome()]) == .active)
+    }
+
+    @Test func windowBehindTheOwnerNeverCovers() {
+        let slack = Self.overlay(frame: Self.chromeFrame)
+        #expect(Self.verdict(owner: Self.owner(), windows: [Self.chrome(), slack]) == .active)
+    }
+
+    @Test func invisibleWindowInFrontDoesNotCover() {
+        let ghost = Self.overlay(frame: Self.chromeFrame, alpha: 0)
+        #expect(Self.verdict(owner: Self.owner(), windows: [ghost, Self.chrome()]) == .active)
+    }
+
+    @Test func systemLayersInFrontDoNotCover() {
+        // Thanh menu và Dock luôn nằm trước mọi cửa sổ thường.
+        let menuBar = Self.overlay(
+            bundleIdentifier: "com.apple.controlcenter",
+            applicationName: "Control Center",
+            frame: Self.chromeFrame,
+            layer: 24
+        )
+        #expect(Self.verdict(owner: Self.owner(), windows: [menuBar, Self.chrome()]) == .active)
+    }
+
+    @Test func subVoiceOwnWindowInFrontDoesNotCover() {
+        let ourWindow = Self.overlay(
+            bundleIdentifier: Self.ownBundle,
+            applicationName: "SubVoice",
+            frame: Self.chromeFrame
+        )
+        #expect(Self.verdict(owner: Self.owner(), windows: [ourWindow, Self.chrome()]) == .active)
+    }
 }

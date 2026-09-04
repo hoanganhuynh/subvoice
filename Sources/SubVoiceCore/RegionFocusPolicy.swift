@@ -49,6 +49,18 @@ public enum RegionFocusPolicy {
             return .paused(.regionOutsideWindow(name))
         }
 
+        // Cố ý KHÔNG hỏi app nào đang ở trước. Mở Slack ở một góc màn hình mà
+        // nó không che vùng phụ đề thì phim vẫn hiện, chữ trong vùng vẫn là
+        // phụ đề — không có gì để đọc nhầm. Chỉ thứ gì thực sự đè lên vùng đọc
+        // mới đáng dừng.
+        let isCovered = windows.prefix(index).contains { window in
+            window.layer == 0
+                && window.alpha > 0
+                && (ownBundleIdentifier == nil || window.bundleIdentifier != ownBundleIdentifier)
+                && window.frame.intersects(regionGlobalRect)
+        }
+        if isCovered { return .paused(.windowCovered(name)) }
+
         return .active
     }
 }
