@@ -202,12 +202,15 @@ một lần chụp để không tra lại cho từng cửa sổ của cùng mộ
 
 `start` chạy `Timer` 0.4 giây trên main, và đăng ký hai quan sát viên trên
 `NSWorkspace.shared.notificationCenter` để xét lại ngay lúc đổi app hoặc đổi
-Space. Mỗi lần xét, watcher bỏ qua vòng đó và giữ nguyên kết luận cũ trong hai
-trường hợp: `NSWorkspace.shared.frontmostApplication` chính là SubVoice — người
-dùng mở cửa sổ SubVoice để chỉnh giọng giữa chừng không được coi là chuyển app —
-hoặc `snapshot()` trả về danh sách rỗng. Ngoài hai ca đó thì gọi
-`RegionFocusPolicy.evaluate`. `onVerdictChange` chỉ bắn khi kết luận đổi so với
-lần trước.
+Space. Watcher chỉ bỏ qua một vòng xét khi `snapshot()` trả về danh sách rỗng;
+ngoài ca đó thì luôn gọi `RegionFocusPolicy.evaluate`. `onVerdictChange` chỉ bắn
+khi kết luận đổi so với lần trước.
+
+Watcher KHÔNG hỏi app nào đang ở trước. Bản nháp đầu có thêm luật "SubVoice đang
+ở trước thì bỏ qua vòng xét", nhưng nó tắt hẳn tính năng: người dùng bấm Bắt đầu
+từ cửa sổ chính thì SubVoice là app ở trước, và watcher không xét lấy một lần
+nào. Luật đó cũng thừa — `evaluate` vốn đã loại cửa sổ của chính SubVoice khỏi
+phép kiểm che, nên mở cửa sổ SubVoice giữa chừng không bao giờ gây tạm dừng.
 
 `stop` huỷ timer, gỡ quan sát viên, xoá kết luận cũ.
 

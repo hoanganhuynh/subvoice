@@ -63,14 +63,11 @@ final class WindowWatcher {
     private func evaluate() {
         guard let owner else { return }
 
+        // KHÔNG hỏi app nào đang ở trước. Luật xét theo thứ tự cửa sổ, và cửa sổ
+        // của chính SubVoice đã bị loại khỏi phép kiểm che bên trong `evaluate`.
+        // Bỏ qua vòng xét khi SubVoice ở trước sẽ tắt hẳn tính năng đúng lúc
+        // người dùng vừa bấm Bắt đầu từ cửa sổ chính.
         let ownBundleIdentifier = Bundle.main.bundleIdentifier
-
-        // Người dùng mở cửa sổ SubVoice để chỉnh giọng giữa chừng không phải là
-        // chuyển app: bỏ qua vòng này và giữ nguyên kết luận cũ.
-        if let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
-           front == ownBundleIdentifier {
-            return
-        }
 
         // Danh sách rỗng là lỗi đọc, không phải bằng chứng vùng đọc bị che.
         let windows = Self.snapshot()
