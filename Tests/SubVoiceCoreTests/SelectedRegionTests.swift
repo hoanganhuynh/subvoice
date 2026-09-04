@@ -94,3 +94,45 @@ import CoreGraphics
     #expect(veryFast >= 1.55)
     #expect(veryFast / verySlow >= 2.3)
 }
+
+@Test func regionDefaultsToHavingNoOwner() {
+    let region = SelectedRegion(
+        displayID: 1,
+        rect: CGRect(x: 0, y: 0, width: 100, height: 40),
+        scale: 2
+    )
+    #expect(region.owner == nil)
+}
+
+@Test func regionRoundTripsItsOwner() throws {
+    let region = SelectedRegion(
+        displayID: 1,
+        rect: CGRect(x: 0, y: 0, width: 100, height: 40),
+        scale: 2,
+        owner: RegionOwner(
+            bundleIdentifier: "com.google.Chrome",
+            applicationName: "Google Chrome",
+            windowNumber: 7788,
+            windowTitle: "Phim hay"
+        )
+    )
+
+    let data = try JSONEncoder().encode(region)
+    let decoded = try JSONDecoder().decode(SelectedRegion.self, from: data)
+
+    #expect(decoded == region)
+    #expect(decoded.owner?.windowTitle == "Phim hay")
+}
+
+@Test func regionSavedBeforeThisFeatureStillDecodes() throws {
+    // Vùng do bản cũ ghi xuống UserDefaults, chưa hề có khoá `owner`.
+    let legacy = Data(#"""
+    {"displayID":3,"rect":[[100,120],[400,60]],"scale":2}
+    """#.utf8)
+
+    let region = try JSONDecoder().decode(SelectedRegion.self, from: legacy)
+
+    #expect(region.displayID == 3)
+    #expect(region.rect == CGRect(x: 100, y: 120, width: 400, height: 60))
+    #expect(region.owner == nil)
+}
