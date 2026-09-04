@@ -69,6 +69,7 @@ final class AppCoordinator {
     private let capturer = ScreenCapturer()
     private let systemSpeech = SystemSpeechBackend()
     private let regionSelector = RegionSelector()
+    private let windowWatcher = WindowWatcher()
     private let hotKeys = HotKeyManager()
     private var menuBar: MenuBarController!
 
@@ -83,6 +84,9 @@ final class AppCoordinator {
     nonisolated(unsafe) private let captureState = CaptureQueueState()
     nonisolated private let latencyLock = NSLock()
     nonisolated(unsafe) private var changeDetectedAt: Date?
+    // Đọc từ hàng đợi bắt màn hình, ghi từ main. Cùng khuôn với changeDetectedAt.
+    nonisolated private let pauseLock = NSLock()
+    nonisolated(unsafe) private var isWindowPaused = false
 
     private var gate = TextGate()
     private var speechQueue = SpeechQueue()
@@ -104,6 +108,24 @@ final class AppCoordinator {
 
     private var isPreviewing: Bool {
         if case .preview = speechActivity { return true }
+        return false
+    }
+
+    nonisolated private func windowPaused() -> Bool {
+        pauseLock.lock()
+        defer { pauseLock.unlock() }
+        return isWindowPaused
+    }
+
+    private func setWindowPaused(_ paused: Bool) {
+        pauseLock.lock()
+        isWindowPaused = paused
+        pauseLock.unlock()
+    }
+
+    /// Đang đọc dở một câu bắt từ màn hình.
+    private var isSpeakingCapturedText: Bool {
+        if case .capture = speechActivity { return true }
         return false
     }
 
@@ -300,10 +322,12 @@ final class AppCoordinator {
         case .setPauseWhenWindowInactive(let enabled):
             settings.pauseWhenWindowInactive = enabled
             Store.saveSettings(settings)
+            applyWindowWatchSettings()
             publishSnapshot()
         case .setPauseOnWindowTitleChange(let enabled):
             settings.pauseOnWindowTitleChange = enabled
             Store.saveSettings(settings)
+            applyWindowWatchSettings()
             publishSnapshot()
         case .downloadKokoro:
             kokoroInstaller.start()
@@ -551,8 +575,10 @@ final class AppCoordinator {
         speechQueue.reset()
         cancelPreviewIfNeeded()
         activeNotice = nil
+        setWindowPaused(false)
         isRunning = true
         publishSnapshot(runState: .listening)
+        startWindowWatcherIfNeeded(for: region)
 
         Task { [weak self] in
             guard let self else { return }
@@ -570,12 +596,67 @@ final class AppCoordinator {
 
     private func stop() {
         isRunning = false
+        windowWatcher.stop()
+        setWindowPaused(false)
         capturer.stop()
         ocr.reset()
         cancelActiveSpeech()
         gate.clear()
         publishSnapshot(runState: .stopped)
         reportLatenciesIfMeasuring()
+    }
+
+    /// `SelectedRegion.rect` ở hệ cục bộ của display; danh sách cửa sổ ở hệ
+    /// toàn cục gốc trên-trái mà `CGDisplayBounds` dùng.
+    private func globalRect(for region: SelectedRegion) -> CGRect {
+        Geometry.toGlobalTopLeft(
+            displayLocalRect: region.rect,
+            displayBounds: CGDisplayBounds(region.displayID)
+        )
+    }
+
+    /// Neo lại cửa sổ chủ rồi bật watcher. Neo thất bại thì phiên này chạy
+    /// không khoá cửa sổ — người dùng vẫn nghe được phụ đề, đó mới là việc chính.
+    private func startWindowWatcherIfNeeded(for region: SelectedRegion) {
+        guard settings.pauseWhenWindowInactive, let owner = region.owner else { return }
+        let rect = globalRect(for: region)
+        guard let anchored = RegionFocusPolicy.reanchor(
+            owner: owner,
+            regionGlobalRect: rect,
+            windows: WindowWatcher.snapshot(),
+            ownBundleIdentifier: Bundle.main.bundleIdentifier
+        ) else { return }
+
+        // Số hiệu mới chỉ giữ trong bộ nhớ: ghi xuống Store cũng vô nghĩa vì
+        // phiên sau lại phải neo lại từ đầu.
+        self.region?.owner = anchored
+
+        windowWatcher.onVerdictChange = { [weak self] verdict in
+            self?.handleFocusVerdict(verdict)
+        }
+        windowWatcher.start(owner: anchored, regionGlobalRect: rect, settings: settings)
+    }
+
+    private func handleFocusVerdict(_ verdict: RegionFocusVerdict) {
+        guard isRunning else { return }
+        switch verdict {
+        case .paused(let reason):
+            setWindowPaused(true)
+            publishSnapshot(runState: .paused(reason))
+        case .active:
+            setWindowPaused(false)
+            publishSnapshot(runState: isSpeakingCapturedText ? .speaking : .listening)
+        }
+    }
+
+    /// Đổi công tắc giữa chừng phải có hiệu lực ngay: tắt công tắc tổng là
+    /// thoát tạm dừng lập tức, không bắt người dùng dừng rồi bật lại.
+    private func applyWindowWatchSettings() {
+        guard isRunning else { return }
+        windowWatcher.stop()
+        handleFocusVerdict(.active)
+        guard settings.pauseWhenWindowInactive, let region else { return }
+        startWindowWatcherIfNeeded(for: region)
     }
 
     private func reselectRegion(initiatedByStart: Bool = false) {
@@ -597,11 +678,17 @@ final class AppCoordinator {
         regionSelector.begin { [weak self] selected in
             guard let self else { return }
             self.isSelectingRegion = false
-            guard let selected else {
+            guard var selected else {
                 if shouldResume { self.startCapturing() }
                 else { self.refreshIdleState() }
                 return
             }
+            // Cửa sổ nằm dưới vùng vừa khoanh chính là thứ vùng này thuộc về.
+            selected.owner = RegionFocusPolicy.owner(
+                forGlobalRect: self.globalRect(for: selected),
+                windows: WindowWatcher.snapshot(),
+                ownBundleIdentifier: Bundle.main.bundleIdentifier
+            )
             self.region = selected
             Store.saveRegion(selected)
             if shouldResume {
@@ -616,6 +703,13 @@ final class AppCoordinator {
 
     /// Chạy trên `capturer.captureQueue`, KHÔNG phải main thread.
     private nonisolated func handleFrame(_ frame: CVPixelBuffer) {
+        // Cửa sổ chủ đang khuất -> bỏ khung, và reset mốc so sánh để khung đầu
+        // tiên sau khi quay lại là mốc mới chứ không bị so với trước lúc dừng.
+        guard !windowPaused() else {
+            captureState.reset()
+            return
+        }
+
         CVPixelBufferLockBaseAddress(frame, .readOnly)
         let signature: BrightnessSignature? = CVPixelBufferGetBaseAddress(frame).map { base in
             ChangeDetector.signature(
@@ -717,7 +811,11 @@ final class AppCoordinator {
 
     private func handleSpeechStarted(_ token: UUID) {
         guard speechActivity.token == token else { return }
-        publishSnapshot(runState: (isRunning || isPreviewing) ? .speaking : .stopped)
+        // Câu bắt trước lúc tạm dừng vẫn được đọc hết, nhưng không được kéo
+        // giao diện khỏi trạng thái tạm dừng.
+        if !windowPaused() {
+            publishSnapshot(runState: (isRunning || isPreviewing) ? .speaking : .stopped)
+        }
 
         guard measuringLatency else { return }
         latencyLock.lock()
@@ -747,7 +845,7 @@ final class AppCoordinator {
             }
             guard let next = speechQueue.finished() else {
                 speechActivity = .idle
-                publishSnapshot(runState: .listening)
+                if !windowPaused() { publishSnapshot(runState: .listening) }
                 return
             }
             speakCaptureSentence(next)
