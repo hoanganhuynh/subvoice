@@ -170,4 +170,53 @@ struct RegionFocusPolicyTests {
         )
         #expect(Self.verdict(owner: Self.owner(), windows: [ourWindow, Self.chrome()]) == .active)
     }
+
+    @Test func changedTitlePauses() {
+        #expect(
+            Self.verdict(owner: Self.owner(), windows: [Self.chrome(title: "Tin tức")])
+                == .paused(.contentChanged("Google Chrome"))
+        )
+    }
+
+    @Test func changedTitleReadsWhenTheToggleIsOff() {
+        #expect(
+            Self.verdict(
+                owner: Self.owner(),
+                windows: [Self.chrome(title: "Tin tức")],
+                pauseOnTitleChange: false
+            ) == .active
+        )
+    }
+
+    @Test func notificationCounterAloneIsNotAContentChange() {
+        #expect(
+            Self.verdict(owner: Self.owner(), windows: [Self.chrome(title: "(3) Phim hay")])
+                == .active
+        )
+    }
+
+    @Test func unreadableTitleDoesNotPause() {
+        // Không đọc được tiêu đề là thiếu thông tin, không phải bằng chứng nội
+        // dung đã đổi.
+        #expect(Self.verdict(owner: Self.owner(), windows: [Self.chrome(title: nil)]) == .active)
+    }
+
+    @Test func ownerWithoutARecordedTitleNeverPausesOnTitle() {
+        #expect(
+            Self.verdict(
+                owner: Self.owner(title: nil),
+                windows: [Self.chrome(title: "Tin tức")]
+            ) == .active
+        )
+    }
+
+    @Test func coveringWindowWinsOverTitleChange() {
+        let slack = Self.overlay(frame: CGRect(x: 300, y: 850, width: 900, height: 400))
+        #expect(
+            Self.verdict(
+                owner: Self.owner(),
+                windows: [slack, Self.chrome(title: "Tin tức")]
+            ) == .paused(.windowCovered("Google Chrome"))
+        )
+    }
 }

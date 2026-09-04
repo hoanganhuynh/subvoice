@@ -61,6 +61,15 @@ public enum RegionFocusPolicy {
         }
         if isCovered { return .paused(.windowCovered(name)) }
 
+        // Đọc không ra tiêu đề hiện tại thì bỏ qua bước này: thiếu thông tin
+        // không phải là bằng chứng nội dung đã đổi.
+        if pauseOnTitleChange,
+           let expected = owner.windowTitle,
+           let actual = RegionOwner.normalizedTitle(target.title),
+           actual != expected {
+            return .paused(.contentChanged(name))
+        }
+
         return .active
     }
 }
