@@ -26,7 +26,9 @@
 
 Bạn đang xem một bộ phim có phụ đề tiếng Việt, nhưng mắt phải chạy theo chữ thay vì xem diễn xuất. SubVoice khoanh vùng phụ đề trên màn hình, nhận diện chữ, rồi đọc thành tiếng — bạn nghe thoại và nhìn hình.
 
-Hoạt động với **mọi nguồn**: Netflix, YouTube, trình phát cục bộ, phụ đề dạng lớp HTML. Miễn là chữ hiện trên màn hình.
+Hoạt động với phụ đề **hiển thị trên màn hình**: YouTube, trình phát cục bộ như IINA hay VLC, và phụ đề dạng lớp HTML nằm ngoài khung video.
+
+Nội dung có DRM — Netflix, Apple TV+ và tương tự — chặn Screen Recording ở tầng hệ điều hành, nên SubVoice chỉ nhận được khung đen và không đọc được.
 
 ## Tải về
 
@@ -234,7 +236,7 @@ open ~/Applications/SubVoice.app --args --trace
 ## Giới hạn đã biết
 
 - Chỉ đọc chữ đang hiển thị trong vùng bạn đã chọn.
-- Nội dung DRM có thể chặn Screen Recording; phụ đề dạng lớp HTML bên ngoài video thường vẫn đọc được.
+- Nội dung DRM (Netflix, Apple TV+…) bị macOS chặn khỏi Screen Recording — không đọc được. Phụ đề dạng lớp HTML bên ngoài khung video thì vẫn đọc bình thường.
 - Kokoro tự nhiên hơn nhưng chậm hơn đáng kể so với giọng hệ thống.
 - Gói Kokoro chỉ có bản Apple Silicon.
 - Hiện tập trung vào tiếng Việt và macOS.
