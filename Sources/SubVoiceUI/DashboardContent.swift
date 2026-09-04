@@ -1,4 +1,5 @@
 import Foundation
+import SubVoiceCore
 
 /// Chữ hiển thị ở khu vực trung tâm, suy ra hoàn toàn từ trạng thái chạy.
 ///
@@ -36,6 +37,13 @@ public struct DashboardContent: Equatable, Sendable {
             symbolName = "waveform.circle.fill"
             recoveryTitle = nil
             recoveryAction = nil
+        case .paused(let reason):
+            title = "SubVoice đang chờ"
+            detail = Self.pauseDetail(for: reason)
+            primaryActionTitle = "Dừng đọc"
+            symbolName = "pause.circle"
+            recoveryTitle = nil
+            recoveryAction = nil
         case .warning(let warning):
             title = "SubVoice cần bạn hỗ trợ"
             detail = warning.message
@@ -43,6 +51,15 @@ public struct DashboardContent: Equatable, Sendable {
             symbolName = "exclamationmark.triangle.fill"
             recoveryTitle = Self.label(for: warning.recovery)
             recoveryAction = warning.recovery ?? .retry
+        }
+    }
+
+    private static func pauseDetail(for reason: RegionPauseReason) -> String {
+        switch reason {
+        case .windowGone(let app): "Tạm dừng — cửa sổ \(app) không còn hiện"
+        case .windowCovered: "Tạm dừng — vùng đọc đang bị che"
+        case .regionOutsideWindow(let app): "Tạm dừng — cửa sổ \(app) đã đổi vị trí"
+        case .contentChanged(let app): "Tạm dừng — cửa sổ \(app) đã đổi nội dung"
         }
     }
 

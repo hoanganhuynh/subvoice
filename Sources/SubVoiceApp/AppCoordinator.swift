@@ -297,6 +297,14 @@ final class AppCoordinator {
             mainWindow.apply(theme: theme)
         case .setLaunchAtLogin(let enabled):
             setLaunchAtLogin(enabled)
+        case .setPauseWhenWindowInactive(let enabled):
+            settings.pauseWhenWindowInactive = enabled
+            Store.saveSettings(settings)
+            publishSnapshot()
+        case .setPauseOnWindowTitleChange(let enabled):
+            settings.pauseOnWindowTitleChange = enabled
+            Store.saveSettings(settings)
+            publishSnapshot()
         case .downloadKokoro:
             kokoroInstaller.start()
         case .cancelKokoroDownload:

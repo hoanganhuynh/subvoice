@@ -70,6 +70,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             setSymbol("waveform.circle.fill", description: "SubVoice đang đọc")
             toggleItem.title = "Tắt đọc"
             warningItem.isHidden = true
+        case .paused:
+            // Lấy đúng câu chữ mà cửa sổ chính đang hiện, để hai nơi không nói
+            // lệch nhau về cùng một trạng thái.
+            let detail = DashboardContent(runState: runState).detail
+            setSymbol("pause.circle", description: detail)
+            toggleItem.title = "Tắt đọc"
+            warningItem.isHidden = true
         case .warning(let warning):
             setSymbol("exclamationmark.triangle.fill", description: warning.message)
             toggleItem.title = "Bật đọc"
