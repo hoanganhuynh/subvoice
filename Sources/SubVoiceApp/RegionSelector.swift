@@ -7,6 +7,7 @@ final class RegionSelector {
 
     private var overlays: [SelectionOverlay] = []
     private var completion: ((SelectedRegion?) -> Void)?
+    private var previousActivationPolicy: NSApplication.ActivationPolicy?
     private var localEscapeMonitor: Any?
     private var globalEscapeMonitor: Any?
 
@@ -14,10 +15,18 @@ final class RegionSelector {
         guard overlays.isEmpty else { return }
         self.completion = completion
 
-        // KHONG goi NSApp.activate va KHONG lam cua so key. App chay o
-        // activationPolicy .regular, nen kich hoat no se keo macOS chuyen sang
-        // Space chua cua so cua app — tuc la nem nguoi dung ra khoi bo phim dang
-        // xem toan man hinh, dung luc ho can chon vung nhat.
+        // Cua so cua app `.regular` KHONG the hien len Space toan man hinh cua
+        // app khac, du co `.canJoinAllSpaces` hay level cao tới đâu. Đã đo bằng
+        // hai tiến trình riêng: `.regular` luôn thất bại, `.accessory` luôn được.
+        //
+        // Đổi policy phải xảy ra TRƯỚC khi tạo cửa sổ; đổi sau thì không ăn
+        // thua, vì Space của cửa sổ đã được ấn định lúc tạo.
+        //
+        // Cũng KHÔNG gọi NSApp.activate và KHÔNG làm cửa sổ key: kích hoạt app
+        // sẽ kéo macOS chuyển Space, ném người dùng ra khỏi bộ phim đang xem.
+        previousActivationPolicy = NSApp.activationPolicy()
+        NSApp.setActivationPolicy(.accessory)
+
         overlays = NSScreen.screens.map { screen in
             let overlay = SelectionOverlay(screen: screen)
             overlay.onFinish = { [weak self] globalRect in
@@ -73,6 +82,11 @@ final class RegionSelector {
         stopEscapeMonitors()
         overlays.forEach { $0.close() }
         overlays.removeAll()
+        // Trả lại Dock icon. Phải chạy trên mọi nhánh thoát, kể cả khi huỷ.
+        if let previousActivationPolicy {
+            NSApp.setActivationPolicy(previousActivationPolicy)
+            self.previousActivationPolicy = nil
+        }
 
         let handler = completion
         completion = nil
@@ -128,11 +142,8 @@ private final class SelectionOverlay: NSWindow {
         isOpaque = false
         hasShadow = false
         ignoresMouseEvents = false
-        // `.fullScreenAuxiliary` la cho cua so phu di kem cua so toan man hinh cua
-        // CHINH app nay, khong phai de phu len Space cua app khac. `.fullScreenNone`
-        // moi la thu giu overlay o ngoai co che Space cua fullscreen.
         collectionBehavior = [
-            .canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone,
+            .canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle,
         ]
 
         selectionView.frame = NSRect(origin: .zero, size: screen.frame.size)
