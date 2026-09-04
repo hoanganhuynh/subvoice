@@ -32,9 +32,11 @@ Hoạt động với **mọi nguồn**: Netflix, YouTube, trình phát cục b�
 
 <div align="center">
 
-### [⬇️ Tải SubVoice cho macOS](https://github.com/hoanganhuynh/subvoice/releases/latest)
+### [⬇️ Tải SubVoice 0.1.0](https://github.com/hoanganhuynh/subvoice/releases/download/v0.1.0/SubVoice-0.1.0.zip)
 
 `SubVoice-0.1.0.zip` · 2,7 MB · macOS 14+ · Apple Silicon
+
+<sub>[Xem tất cả phiên bản](https://github.com/hoanganhuynh/subvoice/releases)</sub>
 
 </div>
 
