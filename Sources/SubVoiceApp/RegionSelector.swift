@@ -7,21 +7,49 @@ final class RegionSelector {
 
     private var overlays: [SelectionOverlay] = []
     private var completion: ((SelectedRegion?) -> Void)?
+    private var localEscapeMonitor: Any?
+    private var globalEscapeMonitor: Any?
 
     func begin(completion: @escaping (SelectedRegion?) -> Void) {
         guard overlays.isEmpty else { return }
         self.completion = completion
 
-        NSApp.activate(ignoringOtherApps: true)
+        // KHONG goi NSApp.activate va KHONG lam cua so key. App chay o
+        // activationPolicy .regular, nen kich hoat no se keo macOS chuyen sang
+        // Space chua cua so cua app — tuc la nem nguoi dung ra khoi bo phim dang
+        // xem toan man hinh, dung luc ho can chon vung nhat.
         overlays = NSScreen.screens.map { screen in
             let overlay = SelectionOverlay(screen: screen)
             overlay.onFinish = { [weak self] globalRect in
                 self?.finish(globalRect: globalRect, screen: screen)
             }
             overlay.onCancel = { [weak self] in self?.finish(globalRect: nil, screen: nil) }
-            overlay.makeKeyAndOrderFront(nil)
+            overlay.orderFrontRegardless()
             return overlay
         }
+        startEscapeMonitors()
+    }
+
+    /// Esc phai bat bang event monitor chu khong qua keyDown: cua so co tinh
+    /// khong duoc lam key de khoi doi Space, ma khong key thi khong nhan keyDown.
+    private func startEscapeMonitors() {
+        let cancel: () -> Void = { [weak self] in self?.finish(globalRect: nil, screen: nil) }
+        localEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53 else { return event }
+            cancel()
+            return nil
+        }
+        globalEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 53 else { return }
+            cancel()
+        }
+    }
+
+    private func stopEscapeMonitors() {
+        if let localEscapeMonitor { NSEvent.removeMonitor(localEscapeMonitor) }
+        if let globalEscapeMonitor { NSEvent.removeMonitor(globalEscapeMonitor) }
+        localEscapeMonitor = nil
+        globalEscapeMonitor = nil
     }
 
     /// Bơm mouseDown/Dragged/Up thật vào hàng đợi sự kiện của chính app, để đi
@@ -42,6 +70,7 @@ final class RegionSelector {
     }
 
     private func finish(globalRect: CGRect?, screen: NSScreen?) {
+        stopEscapeMonitors()
         overlays.forEach { $0.close() }
         overlays.removeAll()
 
@@ -99,7 +128,12 @@ private final class SelectionOverlay: NSWindow {
         isOpaque = false
         hasShadow = false
         ignoresMouseEvents = false
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        // `.fullScreenAuxiliary` la cho cua so phu di kem cua so toan man hinh cua
+        // CHINH app nay, khong phai de phu len Space cua app khac. `.fullScreenNone`
+        // moi la thu giu overlay o ngoai co che Space cua fullscreen.
+        collectionBehavior = [
+            .canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone,
+        ]
 
         selectionView.frame = NSRect(origin: .zero, size: screen.frame.size)
         selectionView.autoresizingMask = [.width, .height]
@@ -164,6 +198,10 @@ private final class SelectionView: NSView {
     }
 
     override var acceptsFirstResponder: Bool { true }
+
+    /// App khong duoc kich hoat, nen cu click dau tien phai di thang vao view
+    /// thay vi chi dung lai o viec dua app len truoc.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     private var selectionRect: CGRect? {
         guard let anchor, let current else { return nil }
