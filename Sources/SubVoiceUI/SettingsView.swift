@@ -15,7 +15,7 @@ struct SettingsView: View {
         SheetScaffold(title: "Cài đặt", onClose: onClose) {
             ScrollView {
                 VStack(alignment: .leading, spacing: AuroraTheme.spacingMedium) {
-                    section("Giao diện") {
+                    section("Giao diện", showsBackground: false) {
                         ThemePicker(
                             selected: state.settings.themeMode,
                             onSelect: { viewModel.send(.setTheme($0)) }
@@ -23,14 +23,11 @@ struct SettingsView: View {
                     }
 
                     section("Khởi động") {
-                        Toggle(
-                            "Khởi động cùng máy",
-                            isOn: Binding(
-                                get: { state.launchAtLoginEnabled },
-                                set: { viewModel.send(.setLaunchAtLogin($0)) }
-                            )
+                        SettingToggle(
+                            title: "Khởi động cùng máy",
+                            isOn: state.launchAtLoginEnabled,
+                            onChange: { viewModel.send(.setLaunchAtLogin($0)) }
                         )
-                        .toggleStyle(.switch)
 
                         Button("Chạy lại hướng dẫn") {
                             viewModel.send(.restartOnboarding)
@@ -38,23 +35,17 @@ struct SettingsView: View {
                     }
 
                     section("Vùng đọc") {
-                        Toggle(
-                            "Chỉ đọc khi cửa sổ gốc đang hiện",
-                            isOn: Binding(
-                                get: { state.settings.pauseWhenWindowInactive },
-                                set: { viewModel.send(.setPauseWhenWindowInactive($0)) }
-                            )
+                        SettingToggle(
+                            title: "Chỉ đọc khi cửa sổ gốc đang hiện",
+                            isOn: state.settings.pauseWhenWindowInactive,
+                            onChange: { viewModel.send(.setPauseWhenWindowInactive($0)) }
                         )
-                        .toggleStyle(.switch)
 
-                        Toggle(
-                            "Dừng khi tiêu đề cửa sổ đổi",
-                            isOn: Binding(
-                                get: { state.settings.pauseOnWindowTitleChange },
-                                set: { viewModel.send(.setPauseOnWindowTitleChange($0)) }
-                            )
+                        SettingToggle(
+                            title: "Dừng khi tiêu đề cửa sổ đổi",
+                            isOn: state.settings.pauseOnWindowTitleChange,
+                            onChange: { viewModel.send(.setPauseOnWindowTitleChange($0)) }
                         )
-                        .toggleStyle(.switch)
                         .disabled(!state.settings.pauseWhenWindowInactive)
 
                         Text("Vùng đọc nhớ cửa sổ đã sinh ra nó và ngưng đọc khi "
@@ -122,8 +113,11 @@ struct SettingsView: View {
         }
     }
 
+    /// `showsBackground: false` cho mục mà nội dung đã tự có nền — lồng thẻ
+    /// trong thẻ chỉ làm dày thêm chứ không phân nhóm rõ hơn.
     private func section<Content: View>(
         _ title: String,
+        showsBackground: Bool = true,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: AuroraTheme.spacingXSmall) {
@@ -134,8 +128,38 @@ struct SettingsView: View {
                 content()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(AuroraTheme.spacingSmall)
-            .background(AuroraCardBackground())
+            .padding(showsBackground ? AuroraTheme.spacingSmall : 0)
+            .background { if showsBackground { AuroraCardBackground() } }
+        }
+    }
+}
+
+/// Công tắc đứng TRƯỚC nhãn, để mọi công tắc trong Cài đặt thẳng một hàng dọc ở
+/// lề trái. `Toggle` dựng sẵn đặt nhãn trước rồi mới tới công tắc, nên mỗi hàng
+/// lại lệch đi một khoảng đúng bằng độ dài nhãn.
+///
+/// `labelsHidden` bỏ nhãn dựng sẵn nên nhãn accessibility phải đặt lại bằng tay,
+/// và phần `Text` vẽ ra được giấu khỏi accessibility để VoiceOver không đọc hai
+/// lần cùng một câu.
+private struct SettingToggle: View {
+
+    let title: String
+    let isOn: Bool
+    let onChange: (Bool) -> Void
+
+    @Environment(\.aurora) private var theme
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        HStack(spacing: AuroraTheme.spacingSmall) {
+            Toggle("", isOn: Binding(get: { isOn }, set: onChange))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .accessibilityLabel(title)
+            Text(title)
+                .foregroundStyle(isEnabled ? theme.primaryText : theme.secondaryText)
+                .accessibilityHidden(true)
+            Spacer(minLength: 0)
         }
     }
 }

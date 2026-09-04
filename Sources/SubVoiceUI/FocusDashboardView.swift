@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Bố cục Focus First: trạng thái và nút bật/tắt chiếm trung tâm, thiết lập
@@ -129,10 +130,20 @@ private struct TopBar: View {
 
     var body: some View {
         HStack(spacing: AuroraTheme.spacingSmall) {
-            Label("SubVoice", systemImage: "captions.bubble.fill")
-                .font(.headline)
-                .foregroundStyle(theme.primaryText)
-                .labelStyle(.titleAndIcon)
+            // Icon thật của app thay cho SF Symbol chung chung. Lấy qua
+            // `applicationIconImage` nên không phải nhét thêm file ảnh vào
+            // module, và luôn khớp với icon đang hiện ở Dock.
+            HStack(spacing: AuroraTheme.spacingXSmall) {
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 24, height: 24)
+                Text("SubVoice")
+                    .font(.headline)
+                    .foregroundStyle(theme.primaryText)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("SubVoice")
 
             Spacer()
 
