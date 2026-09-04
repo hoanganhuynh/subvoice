@@ -32,9 +32,9 @@ Nội dung có DRM thì không. Netflix, Apple TV+ và tương tự bị macOS c
 
 <div align="center">
 
-### [⬇️ Tải SubVoice 0.1.3](https://github.com/hoanganhuynh/subvoice/releases/download/v0.1.3/SubVoice-0.1.3.zip)
+### [⬇️ Tải SubVoice 0.1.4](https://github.com/hoanganhuynh/subvoice/releases/download/v0.1.4/SubVoice-0.1.4.zip)
 
-`SubVoice-0.1.3.zip` · 2,7 MB · macOS 14+ · Apple Silicon
+`SubVoice-0.1.4.zip` · 2,7 MB · macOS 14+ · Apple Silicon
 
 <sub>[Xem tất cả phiên bản](https://github.com/hoanganhuynh/subvoice/releases)</sub>
 
