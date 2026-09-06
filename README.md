@@ -10,7 +10,7 @@
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-555555?logo=apple&logoColor=white)](#yêu-cầu)
 [![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](https://www.swift.org/)
 [![Offline](https://img.shields.io/badge/xử_lý-100%25_offline-2ea44f)](#quyền-riêng-tư)
-[![Tests](https://img.shields.io/badge/tests-119_passing-6f42c1)](#kiểm-thử)
+[![Tests](https://img.shields.io/badge/tests-165_passing-6f42c1)](#kiểm-thử)
 
 [Tải về](#tải-về) · [Tính năng](#tính-năng) · [Cách hoạt động](#cách-hoạt-động) · [Quyền riêng tư](#quyền-riêng-tư)
 
@@ -103,6 +103,18 @@ Phím tắt toàn cục chạy cả khi video đang toàn màn hình ở app kh�
 
 Giao diện theo sáng, tối, hoặc theo hệ thống. Dùng được hoàn toàn bằng bàn phím và VoiceOver, có tôn trọng Increase Contrast và Reduce Motion.
 
+## Trên thanh menu
+
+Cả phiên đọc điều khiển được từ biểu tượng trên thanh menu, khỏi cần mở cửa sổ: bật hoặc tắt đọc, chọn lại vùng, đổi bộ đọc, giọng, tốc độ và âm lượng.
+
+<div align="center">
+<img src="Resources/Screenshots/menu-bar.png" alt="Menu của SubVoice trên thanh menu" width="360">
+</div>
+
+Biểu tượng đổi theo trạng thái: gạch chéo khi tắt, sóng âm khi đang nghe hoặc đang đọc, tam giác cảnh báo kèm dòng lý do ngay trong menu khi có gì đó hỏng.
+
+Đóng cửa sổ không làm SubVoice dừng. App ở lại trên thanh menu, câu đang đọc không bị ngắt. Bấm Dock icon hoặc mục Mở SubVoice để hiện lại cửa sổ.
+
 ## Cách hoạt động
 
 ```text
@@ -154,8 +166,6 @@ Năm mức tốc độ ánh xạ sang dải 0,65× tới 1,55×. Thay đổi có
 | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>V</kbd> | Bật hoặc tắt đọc |
 | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>R</kbd> | Chọn lại vùng phụ đề |
 | <kbd>⌘</kbd> <kbd>Q</kbd> | Thoát hẳn |
-
-Đóng cửa sổ không làm SubVoice dừng. App tiếp tục chạy trên menu bar và câu đang đọc không bị ngắt. Bấm Dock icon hoặc mục Mở SubVoice trên menu bar để hiện lại cửa sổ.
 
 ## Quyền riêng tư
 
@@ -223,7 +233,7 @@ Logic đáng test nằm ở `SubVoiceCore` và `SubVoiceUI`, đều là value ty
 ## Kiểm thử
 
 ```bash
-swift test                  # 119 test, 11 suite
+swift test                  # 165 test, 13 suite
 ./Scripts/smoke-overlay.sh  # overlay dưới NSZombie
 ./Scripts/smoke-window.sh   # vòng đời cửa sổ
 ```
