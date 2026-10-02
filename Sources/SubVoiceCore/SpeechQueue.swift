@@ -1,8 +1,7 @@
 /// Hàng đợi câu chờ đọc.
 ///
-/// Không có trần: mọi câu OCR đọc được đều phải được đọc thành tiếng, theo đúng
-/// thứ tự xuất hiện. Đánh đổi là nếu giọng đọc chậm hơn nhịp phụ đề thì nó sẽ
-/// tụt lại dần so với hình — bù bằng cách tăng tốc độ đọc trong menu.
+/// Khi có bốn câu chờ, bỏ hai câu cũ nhất để bám lại phụ đề.
+/// Câu đang phát luôn được đọc hết; các câu còn lại giữ nguyên thứ tự.
 public struct SpeechQueue {
     private var pending: [String] = []
     private var speaking = false
@@ -19,6 +18,7 @@ public struct SpeechQueue {
             return text
         }
         pending.append(text)
+        if pending.count >= 4 { pending.removeFirst(2) }
         return nil
     }
 

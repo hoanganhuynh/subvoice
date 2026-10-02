@@ -22,6 +22,8 @@ struct FrameDecision {
 final class CaptureQueueState {
     private var detector = ChangeDetector()
     private var lastOCRSubmit = Date.distantPast
+    private var deferredOCR: DispatchWorkItem?
+    var session: UUID?
 
     func evaluate(_ signature: BrightnessSignature) -> FrameDecision {
         let before = detector.previousVerdict
@@ -35,16 +37,34 @@ final class CaptureQueueState {
         )
     }
 
-    /// Giới hạn tần suất OCR cứng. Trả về true và ghi nhận mốc nếu được phép chạy.
-    func shouldRunOCR(at now: Date) -> Bool {
-        guard now.timeIntervalSince(lastOCRSubmit) >= DetectorTuning.minOCRInterval else {
-            return false
+    /// Giữ frame mới nhất trong khoảng throttle, kể cả khi stream đứng hình.
+    func submit(_ frame: CVPixelBuffer, on queue: DispatchQueue,
+                perform: @escaping (CVPixelBuffer, UUID) -> Void) {
+        guard let session else { return }
+        deferredOCR?.cancel()
+        let delay = max(0, DetectorTuning.minOCRInterval - Date().timeIntervalSince(lastOCRSubmit))
+        if delay == 0 {
+            lastOCRSubmit = Date()
+            perform(frame, session)
+        } else {
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, self.session == session else { return }
+                self.deferredOCR = nil
+                self.lastOCRSubmit = Date()
+                perform(frame, session)
+            }
+            deferredOCR = work
+            queue.asyncAfter(deadline: .now() + delay, execute: work)
         }
-        lastOCRSubmit = now
-        return true
+    }
+
+    func cancelDeferredOCR() {
+        deferredOCR?.cancel()
+        deferredOCR = nil
     }
 
     func reset() {
+        cancelDeferredOCR()
         detector.reset()
         lastOCRSubmit = .distantPast
     }
@@ -66,7 +86,10 @@ final class AppCoordinator {
         }
     }
 
-    private let capturer = ScreenCapturer()
+    nonisolated private let captureQueue = DispatchQueue(
+        label: "com.williens.subvoice.capture", qos: .userInteractive
+    )
+    private let capturer: ScreenCapturer
     private let systemSpeech = SystemSpeechBackend()
     private let regionSelector = RegionSelector()
     private let windowWatcher = WindowWatcher()
@@ -100,11 +123,14 @@ final class AppCoordinator {
     private var activeNotice: AppWarning?
 
     init() {
+        capturer = ScreenCapturer(captureQueue: captureQueue)
         let loaded = Store.loadSettings()
         settings = loaded
         kokoroSpeech = KokoroSpeechBackend(voiceIdentifier: loaded.kokoroVoiceIdentifier)
     }
     private var isRunning = false
+    private var captureSession: UUID?
+    private var captureStartTask: Task<Void, Never>?
 
     private var isPreviewing: Bool {
         if case .preview = speechActivity { return true }
@@ -456,8 +482,11 @@ final class AppCoordinator {
                 AppWarning(message: message, recovery: .retry)
             ))
         }
-        ocr.onText = { [weak self] text in
-            Task { @MainActor in self?.handleText(text) }
+        ocr.onText = { [weak self] text, session in
+            Task { @MainActor in
+                guard self?.captureSession == session else { return }
+                self?.handleText(text)
+            }
         }
         configureSpeechBackend(systemSpeech)
         configureSpeechBackend(kokoroSpeech)
@@ -570,7 +599,12 @@ final class AppCoordinator {
             return
         }
 
-        captureState.reset()
+        let session = UUID()
+        captureSession = session
+        captureQueue.sync {
+            captureState.reset()
+            captureState.session = session
+        }
         gate.clear()
         speechQueue.reset()
         cancelPreviewIfNeeded()
@@ -580,12 +614,13 @@ final class AppCoordinator {
         publishSnapshot(runState: .listening)
         startWindowWatcherIfNeeded(for: region)
 
-        Task { [weak self] in
-            guard let self else { return }
+        captureStartTask = Task { [weak self] in
+            guard let self, self.captureSession == session, !Task.isCancelled else { return }
             do {
                 try await self.capturer.start(region: region)
             } catch {
-                self.isRunning = false
+                guard self.captureSession == session, !Task.isCancelled else { return }
+                self.stop()
                 self.publishSnapshot(runState: .warning(AppWarning(
                     message: error.localizedDescription,
                     recovery: .retry
@@ -595,10 +630,17 @@ final class AppCoordinator {
     }
 
     private func stop() {
+        captureSession = nil
+        captureStartTask?.cancel()
+        captureStartTask = nil
         isRunning = false
         windowWatcher.stop()
         setWindowPaused(false)
         capturer.stop()
+        captureQueue.sync {
+            captureState.reset()
+            captureState.session = nil
+        }
         ocr.reset()
         cancelActiveSpeech()
         gate.clear()
@@ -707,6 +749,7 @@ final class AppCoordinator {
 
     /// Chạy trên `capturer.captureQueue`, KHÔNG phải main thread.
     private nonisolated func handleFrame(_ frame: CVPixelBuffer) {
+        guard captureState.session != nil else { return }
         // Cửa sổ chủ đang khuất -> bỏ khung, và reset mốc so sánh để khung đầu
         // tiên sau khi quay lại là mốc mới chứ không bị so với trước lúc dừng.
         guard !windowPaused() else {
@@ -751,20 +794,26 @@ final class AppCoordinator {
 
         switch decision.verdict {
         case .blank:
+            captureState.cancelDeferredOCR()
+            let session = captureState.session
             // Vùng phụ đề trống -> xoá trạng thái lọc trùng, để câu lặp lại
             // ở cảnh sau vẫn được đọc.
-            Task { @MainActor [weak self] in self?.gate.clear() }
+            Task { @MainActor [weak self] in
+                guard let self, self.captureSession == session else { return }
+                self.gate.clear()
+            }
 
         case .unchanged:
             break
 
         case .changed:
-            let now = Date()
-            guard captureState.shouldRunOCR(at: now) else { return }
-            latencyLock.lock()
-            changeDetectedAt = now
-            latencyLock.unlock()
-            ocr.submit(frame)
+            captureState.submit(frame, on: captureQueue) { [weak self] frame, session in
+                guard let self else { return }
+                self.latencyLock.lock()
+                self.changeDetectedAt = Date()
+                self.latencyLock.unlock()
+                self.ocr.submit(frame, session: session)
+            }
         }
     }
 

@@ -33,21 +33,35 @@ import Testing
     #expect(!queue.isSpeaking)
 }
 
-@Test func queueNeverDropsASentence() {
+@Test func fourPendingSentencesDropTheTwoOldestAndCatchUp() {
     var queue = SpeechQueue()
-    _ = queue.enqueue("đang đọc")
-    for text in ["một", "hai", "ba", "bốn", "năm"] {
-        #expect(queue.enqueue(text) == nil)
-    }
-
-    #expect(queue.pendingCount == 5)
-    #expect(queue.finished() == "một")
-    #expect(queue.finished() == "hai")
-    #expect(queue.finished() == "ba")
-    #expect(queue.finished() == "bốn")
-    #expect(queue.finished() == "năm")
+    #expect(queue.enqueue("text 1") == "text 1")
+    _ = queue.enqueue("text 2")
+    #expect(queue.finished() == "text 2")
+    _ = queue.enqueue("text 3")
+    _ = queue.enqueue("text 4")
+    _ = queue.enqueue("text 5")
+    #expect(queue.finished() == "text 3")
+    _ = queue.enqueue("text 6")
+    #expect(queue.pendingCount == 3)
+    _ = queue.enqueue("text 7")
+    #expect(queue.pendingCount == 2)
+    #expect(queue.isSpeaking)
+    #expect(queue.finished() == "text 6")
+    _ = queue.enqueue("text 8")
+    #expect(queue.finished() == "text 7")
+    #expect(queue.finished() == "text 8")
     #expect(queue.finished() == nil)
-    #expect(!queue.isSpeaking)
+    #expect(queue.enqueue("text 9") == "text 9")
+}
+
+@Test func threePendingSentencesArePreserved() {
+    var queue = SpeechQueue()
+    _ = queue.enqueue("current")
+    for text in ["one", "two", "three"] { _ = queue.enqueue(text) }
+    #expect(queue.pendingCount == 3)
+    for text in ["one", "two", "three"] { #expect(queue.finished() == text) }
+    #expect(queue.finished() == nil)
 }
 
 @Test func queuePreservesOrderUnderInterleavedUse() {

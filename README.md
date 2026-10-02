@@ -10,7 +10,7 @@
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-555555?logo=apple&logoColor=white)](#yêu-cầu)
 [![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](https://www.swift.org/)
 [![Offline](https://img.shields.io/badge/xử_lý-100%25_offline-2ea44f)](#quyền-riêng-tư)
-[![Tests](https://img.shields.io/badge/tests-165_passing-6f42c1)](#kiểm-thử)
+[![Tests](https://img.shields.io/badge/tests-171_passing-6f42c1)](#kiểm-thử)
 
 [Tải về](#tải-về) · [Tính năng](#tính-năng) · [Cách hoạt động](#cách-hoạt-động) · [Quyền riêng tư](#quyền-riêng-tư)
 
@@ -32,9 +32,9 @@ Nội dung có DRM thì không. Netflix, Apple TV+ và tương tự bị macOS c
 
 <div align="center">
 
-### [⬇️ Tải SubVoice 0.1.5](https://github.com/hoanganhuynh/subvoice/releases/download/v0.1.5/SubVoice-0.1.5.zip)
+### [⬇️ Tải SubVoice 0.1.6](https://github.com/hoanganhuynh/subvoice/releases/download/v0.1.6/SubVoice-0.1.6.zip)
 
-`SubVoice-0.1.5.zip` · 2,7 MB · macOS 14+ · Apple Silicon
+`SubVoice-0.1.6.zip` · 2,9 MB · macOS 14+ · Apple Silicon
 
 <sub>[Xem tất cả phiên bản](https://github.com/hoanganhuynh/subvoice/releases)</sub>
 
@@ -90,6 +90,8 @@ Hướng dẫn chi tiết kèm ảnh: [maclife.io.vn](https://maclife.io.vn/huon
 Cửa sổ chính đặt trạng thái và nút bật/tắt ở giữa. Ba thẻ dưới đáy cho biết đang đọc vùng nào, bằng giọng gì, và câu gần nhất vừa đọc là gì. Bấm vào thẻ nào thì mở phần đó ra.
 
 Có hai bộ đọc. Giọng hệ thống của macOS phản hồi trong khoảng 50 ms nên bám kịp phụ đề đang chạy. Kokoro nghe tự nhiên hơn nhiều nhưng chậm hơn, và phải tải thêm 375 MB. Đổi qua lại lúc nào cũng được trong Voice Studio, cùng chỗ để chỉnh tốc độ, âm lượng và nghe thử.
+
+Nếu giọng đọc chậm đến mức có 4 câu đang chờ, app bỏ 2 câu chờ cũ nhất để bắt kịp. Câu đang đọc vẫn được đọc hết; các câu còn lại giữ nguyên thứ tự.
 
 Phụ đề đứng yên thì app im lặng chứ không đọc đi đọc lại. Phụ đề hiện dần kiểu fade-in hay cảnh đổi nhanh vẫn xử lý được.
 
@@ -233,7 +235,7 @@ Logic đáng test nằm ở `SubVoiceCore` và `SubVoiceUI`, đều là value ty
 ## Kiểm thử
 
 ```bash
-swift test                  # 165 test, 13 suite
+swift test                  # 171 test, 16 suite
 ./Scripts/smoke-overlay.sh  # overlay dưới NSZombie
 ./Scripts/smoke-window.sh   # vòng đời cửa sổ
 ```

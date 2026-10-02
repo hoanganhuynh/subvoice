@@ -8,12 +8,18 @@ import SubVoiceCore
 final class OCREngine {
 
     /// Gọi trên hàng đợi nội bộ, KHÔNG phải main thread. Chuỗi có thể rỗng.
-    var onText: ((String) -> Void)?
+    var onText: ((String, UUID) -> Void)?
 
     private let queue = DispatchQueue(label: "com.williens.subvoice.ocr", qos: .userInteractive)
     private let lock = NSLock()
+    private let recognizeFrame: (CVPixelBuffer) -> String
+
+    init(recognize: @escaping (CVPixelBuffer) -> String = OCREngine.recognize) {
+        recognizeFrame = recognize
+    }
+
     private var busy = false
-    private var pendingFrame: CVPixelBuffer?
+    private var pendingFrame: (CVPixelBuffer, UUID)?
 
     /// Lần OCR đầu tiên tốn ~540ms vì phải nạp model, các lần sau ~90ms.
     /// KHÔNG bỏ bước này, nếu không câu phụ đề đầu tiên sẽ trễ hơn nửa giây.
@@ -26,17 +32,17 @@ final class OCREngine {
         }
     }
 
-    func submit(_ frame: CVPixelBuffer) {
+    func submit(_ frame: CVPixelBuffer, session: UUID) {
         lock.lock()
         if busy {
-            pendingFrame = frame      // ghi đè: chỉ giữ đúng một khung mới nhất
+            pendingFrame = (frame, session)      // ghi đè: chỉ giữ đúng một khung mới nhất
             lock.unlock()
             return
         }
         busy = true
         lock.unlock()
 
-        queue.async { [weak self] in self?.process(frame) }
+        queue.async { [weak self] in self?.process(frame, session: session) }
     }
 
     func reset() {
@@ -45,10 +51,10 @@ final class OCREngine {
         lock.unlock()
     }
 
-    private func process(_ frame: CVPixelBuffer) {
-        var current: CVPixelBuffer? = frame
-        while let buffer = current {
-            onText?(Self.recognize(buffer))
+    private func process(_ frame: CVPixelBuffer, session: UUID) {
+        var current: (CVPixelBuffer, UUID)? = (frame, session)
+        while let (buffer, session) = current {
+            onText?(recognizeFrame(buffer), session)
 
             lock.lock()
             current = pendingFrame

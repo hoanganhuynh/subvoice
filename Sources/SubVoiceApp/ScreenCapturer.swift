@@ -26,32 +26,68 @@ final class ScreenCapturer: NSObject, SCStreamOutput, SCStreamDelegate {
     /// Gọi trên main thread khi đã thử khởi động lại hết số lần cho phép.
     var onFatalError: ((String) -> Void)?
 
-    let captureQueue = DispatchQueue(label: "com.williens.subvoice.capture", qos: .userInteractive)
+    let captureQueue: DispatchQueue
 
+    init(captureQueue: DispatchQueue = DispatchQueue(
+        label: "com.williens.subvoice.capture", qos: .userInteractive
+    )) {
+        self.captureQueue = captureQueue
+        super.init()
+    }
+
+    private let streamLock = NSLock()
     private var stream: SCStream?
-    private var region: SelectedRegion?
-    private var restartAttempt = 0
+    @MainActor private var generation = UUID()
+    @MainActor private var restartTask: Task<Void, Never>?
+    @MainActor private var region: SelectedRegion?
+    @MainActor private var restartAttempt = 0
     private static let maxRestartAttempts = 5
 
+    @MainActor
     func start(region: SelectedRegion) async throws {
+        try Task.checkCancellation()
+        stop()
         self.region = region
-        try await startStream(region: region)
+        let generation = self.generation
+        try await startStream(region: region, generation: generation)
+        guard self.generation == generation else { throw CancellationError() }
         restartAttempt = 0
     }
 
+    @MainActor
     func stop() {
-        let current = stream
-        stream = nil
+        generation = UUID()
+        restartTask?.cancel()
+        restartTask = nil
+        let current = replaceStream(nil)
         region = nil
         restartAttempt = 0
         Task { try? await current?.stopCapture() }
     }
 
-    private func startStream(region: SelectedRegion) async throws {
+    private func replaceStream(_ next: SCStream?) -> SCStream? {
+        streamLock.lock()
+        defer { streamLock.unlock() }
+        let old = stream
+        stream = next
+        return old
+    }
+
+    private func isCurrent(_ candidate: SCStream) -> Bool {
+        streamLock.lock()
+        defer { streamLock.unlock() }
+        return stream === candidate
+    }
+
+    @MainActor
+    private func startStream(region: SelectedRegion, generation: UUID) async throws {
         let content = try await SCShareableContent.excludingDesktopWindows(
             false,
             onScreenWindowsOnly: false
         )
+        guard self.generation == generation, !Task.isCancelled else {
+            throw CancellationError()
+        }
         guard let display = content.displays.first(where: { $0.displayID == region.displayID })
         else { throw CaptureError.displayNotFound(region.displayID) }
 
@@ -77,8 +113,18 @@ final class ScreenCapturer: NSObject, SCStreamOutput, SCStreamDelegate {
 
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: captureQueue)
-        try await stream.startCapture()
-        self.stream = stream
+        _ = replaceStream(stream)
+        do {
+            try await stream.startCapture()
+        } catch {
+            if isCurrent(stream) { _ = replaceStream(nil) }
+            throw error
+        }
+        guard self.generation == generation, !Task.isCancelled else {
+            if isCurrent(stream) { _ = replaceStream(nil) }
+            try? await stream.stopCapture()
+            throw CancellationError()
+        }
     }
 
     // MARK: - SCStreamOutput
@@ -88,7 +134,7 @@ final class ScreenCapturer: NSObject, SCStreamOutput, SCStreamDelegate {
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of type: SCStreamOutputType
     ) {
-        guard type == .screen, sampleBuffer.isValid else { return }
+        guard isCurrent(stream), type == .screen, sampleBuffer.isValid else { return }
 
         // Hệ điều hành tự đánh dấu khung .idle/.blank khi không có gì đổi.
         // Đây là bộ lọc miễn phí, nhưng KHÔNG thay được ChangeDetector vì
@@ -108,23 +154,25 @@ final class ScreenCapturer: NSObject, SCStreamOutput, SCStreamDelegate {
     // MARK: - SCStreamDelegate
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        guard let region, restartAttempt < Self.maxRestartAttempts else {
-            let message = "Luồng bắt màn hình dừng: \(error.localizedDescription)"
-            DispatchQueue.main.async { [weak self] in self?.onFatalError?(message) }
-            return
-        }
-
-        restartAttempt += 1
-        let backoff = [0.5, 1.0, 2.0, 3.0, 5.0][min(restartAttempt - 1, 4)]
-
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(backoff))
-            guard let self else { return }
-            do {
-                try await self.startStream(region: region)
-            } catch {
-                let message = "Không khởi động lại được: \(error.localizedDescription)"
-                await MainActor.run { self.onFatalError?(message) }
+        Task { @MainActor [weak self] in
+            guard let self, self.isCurrent(stream), let region = self.region else { return }
+            let generation = self.generation
+            _ = self.replaceStream(nil)
+            guard self.restartAttempt < Self.maxRestartAttempts else {
+                self.onFatalError?("Luồng bắt màn hình dừng: \(error.localizedDescription)")
+                return
+            }
+            self.restartAttempt += 1
+            let backoff = [0.5, 1.0, 2.0, 3.0, 5.0][min(self.restartAttempt - 1, 4)]
+            self.restartTask = Task { @MainActor [weak self] in
+                do {
+                    try await Task.sleep(for: .seconds(backoff))
+                    guard let self, self.generation == generation else { return }
+                    try await self.startStream(region: region, generation: generation)
+                } catch {
+                    guard let self, self.generation == generation, !Task.isCancelled else { return }
+                    self.onFatalError?("Không khởi động lại được: \(error.localizedDescription)")
+                }
             }
         }
     }

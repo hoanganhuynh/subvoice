@@ -49,6 +49,11 @@ final class SystemSpeechBackend: NSObject, SpeechBackend, AVSpeechSynthesizerDel
 
     func speak(_ text: String, rate: Float, volume: Float, token: UUID) {
         guard let voice else { return }
+        synthesizer.speak(makeUtterance(text, voice: voice, rate: rate, volume: volume, token: token))
+    }
+
+    func makeUtterance(_ text: String, voice: AVSpeechSynthesisVoice?, rate: Float,
+                       volume: Float, token: UUID) -> AVSpeechUtterance {
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = voice
         utterance.rate = rate
@@ -56,7 +61,7 @@ final class SystemSpeechBackend: NSObject, SpeechBackend, AVSpeechSynthesizerDel
         utterance.preUtteranceDelay = 0
         utterance.postUtteranceDelay = 0
         tokensByUtterance[ObjectIdentifier(utterance)] = token
-        synthesizer.speak(utterance)
+        return utterance
     }
 
     func stop() {
@@ -85,8 +90,7 @@ final class SystemSpeechBackend: NSObject, SpeechBackend, AVSpeechSynthesizerDel
         _ synthesizer: AVSpeechSynthesizer,
         didStart utterance: AVSpeechUtterance
     ) {
-        guard utterance.volume > 0,
-              let token = tokensByUtterance[ObjectIdentifier(utterance)]
+        guard let token = tokensByUtterance[ObjectIdentifier(utterance)]
         else { return }   // bỏ qua câu hâm nóng
         onStart?(token)
     }
@@ -96,7 +100,7 @@ final class SystemSpeechBackend: NSObject, SpeechBackend, AVSpeechSynthesizerDel
         didFinish utterance: AVSpeechUtterance
     ) {
         let token = tokensByUtterance.removeValue(forKey: ObjectIdentifier(utterance))
-        guard utterance.volume > 0, let token else { return }
+        guard let token else { return }
         onFinish?(token)
     }
 
@@ -105,7 +109,7 @@ final class SystemSpeechBackend: NSObject, SpeechBackend, AVSpeechSynthesizerDel
         didCancel utterance: AVSpeechUtterance
     ) {
         let token = tokensByUtterance.removeValue(forKey: ObjectIdentifier(utterance))
-        guard utterance.volume > 0, let token else { return }
+        guard let token else { return }
         onFinish?(token)
     }
 }
