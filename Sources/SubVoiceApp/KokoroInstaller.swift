@@ -20,6 +20,10 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
         delegateQueue: nil
     )
     private var task: URLSessionDownloadTask?
+    // Một hàng đợi nối tiếp: lượt vừa hủy phải dọn incoming xong trước lượt mới.
+    private let installQueue = DispatchQueue(label: "SubVoice.KokoroInstall", qos: .utility)
+    private var installation: KokoroInstallationJob?
+    private let extract: @Sendable (URL, URL) throws -> Void
 
     private(set) var state: KokoroInstallState = .notInstalled {
         didSet {
@@ -32,8 +36,12 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
         package: KokoroPackage = .current,
         fileManager: FileManager = .default,
         applicationSupportDirectory: URL? = nil,
-        sessionConfiguration: URLSessionConfiguration = .default
+        sessionConfiguration: URLSessionConfiguration = .default,
+        extract: @escaping @Sendable (URL, URL) throws -> Void = {
+            try KokoroPackage.extractTar(archive: $0, destination: $1)
+        }
     ) {
+        self.extract = extract
         self.package = package
         self.sessionConfiguration = sessionConfiguration
         let applicationSupport = applicationSupportDirectory
@@ -99,6 +107,8 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
 
     func cancel() {
         guard state.isBusy else { return }
+        installation?.cancel()
+        installation = nil
         let task = task
         self.task = nil
         // Chuyển về terminal TRƯỚC callback bất đồng bộ của URLSession. Nếu
@@ -147,7 +157,9 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
             try FileManager.default.moveItem(at: location, to: staged)
         } catch {
             Task { @MainActor [weak self] in
-                self?.state = .failed(message: error.localizedDescription)
+                guard let self, self.isCurrentTask(downloadTask) else { return }
+                self.task = nil
+                self.state = .failed(message: error.localizedDescription)
             }
             return
         }
@@ -182,23 +194,68 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
     }
 
     private func install(archive: URL) {
-        defer { try? FileManager.default.removeItem(at: archive) }
-        do {
-            try package.install(
-                downloadedArchive: archive,
-                into: layout,
-                onPhase: { phase in
-                    switch phase {
-                    case .verifying: state = .verifying
-                    case .extracting: state = .extracting
-                    case .finishing: state = .finishing
+        let job = KokoroInstallationJob()
+        installation = job
+        state = .verifying
+        let package = package, layout = layout, extract = extract
+        installQueue.async { [weak self] in
+            defer { try? FileManager.default.removeItem(at: archive) }
+            let result = Result {
+                try package.install(
+                    downloadedArchive: archive,
+                    into: layout,
+                    extract: extract,
+                    onPhase: { phase in
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self, self.installation === job else { return }
+                            switch phase {
+                            case .verifying: self.state = .verifying
+                            case .extracting: self.state = .extracting
+                            case .finishing: self.state = .finishing
+                            }
+                        }
+                    },
+                    checkCancellation: { try job.checkCancellation() }
+                )
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard self.installation === job else {
+                    // Hủy có thể trùng lúc swap đã bắt đầu. Nếu swap hoàn tất,
+                    // đọc lại trạng thái trên đĩa khi chưa có lượt mới sở hữu UI.
+                    if self.installation == nil, self.task == nil, !self.state.isBusy {
+                        self.setInstalledState()
                     }
+                    return
                 }
-            )
-            try? FileManager.default.removeItem(at: resumeDataURL)
-            state = .installed(version: package.version)
-        } catch {
-            state = .failed(message: error.localizedDescription)
+                self.installation = nil
+                switch result {
+                case .success:
+                    try? FileManager.default.removeItem(at: self.resumeDataURL)
+                    self.state = .installed(version: package.version)
+                case .failure(let error):
+                    self.state = .failed(message: error.localizedDescription)
+                }
+            }
         }
+    }
+}
+
+/// Cờ hủy được ghi từ MainActor và đọc từ hàng đợi cài đặt.
+private final class KokoroInstallationJob: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
+
+    func checkCancellation() throws {
+        lock.lock()
+        let cancelled = cancelled
+        lock.unlock()
+        if cancelled { throw CancellationError() }
     }
 }

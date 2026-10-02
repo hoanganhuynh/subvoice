@@ -142,18 +142,21 @@ extension KokoroPackage {
         into layout: KokoroInstallLayout,
         fileManager: FileManager = .default,
         extract: (URL, URL) throws -> Void = KokoroPackage.extractTar(archive:destination:),
-        onPhase: (KokoroInstallPhase) -> Void = { _ in }
+        onPhase: (KokoroInstallPhase) -> Void = { _ in },
+        checkCancellation: () throws -> Void = {}
     ) throws {
+        try checkCancellation()
         try Self.healInterruptedSwap(layout, fileManager: fileManager)
 
         onPhase(.verifying)
-        let actual = try Self.sha256Hex(of: archive)
+        let actual = try Self.sha256Hex(of: archive, checkCancellation: checkCancellation)
         // Hằng số này do người bảo trì dán tay; một lần dán chữ hoa không đáng
         // biến thành "gói không toàn vẹn" vĩnh viễn.
         guard actual.caseInsensitiveCompare(sha256) == .orderedSame else {
             throw KokoroInstallError.checksumMismatch(expected: sha256, actual: actual)
         }
 
+        try checkCancellation()
         onPhase(.extracting)
         // `try?` ở đây sẽ nuốt mất trường hợp XOÁ KHÔNG ĐƯỢC, và khi đó tar sẽ
         // trộn gói mới vào rác của lần trước — đúng cái bản cài dở mà hàm này
@@ -166,7 +169,9 @@ extension KokoroPackage {
         var installed = false
         defer { if !installed { try? fileManager.removeItem(at: layout.incoming) } }
 
+        try checkCancellation()
         try extract(archive, layout.incoming)
+        try checkCancellation()
 
         let required = KokoroInstallLayout.requiredFiles(in: layout.incoming)
         guard required.allSatisfy({ fileManager.fileExists(atPath: $0.path) }) else {
@@ -176,6 +181,9 @@ extension KokoroPackage {
         let manifest = try JSONEncoder().encode(KokoroManifest(version: version))
         try manifest.write(to: layout.incoming.appendingPathComponent("manifest.json"))
 
+        // Sau kiểm tra này, hoàn tất đổi thư mục nguyên tử hoặc rollback;
+        // không hủy giữa hai lần đổi tên khiến bản cũ mất khỏi root.
+        try checkCancellation()
         onPhase(.finishing)
         try? fileManager.removeItem(at: layout.previous)
         let hadExistingInstall = fileManager.fileExists(atPath: layout.root.path)
@@ -216,11 +224,12 @@ extension KokoroPackage {
         try fileManager.moveItem(at: layout.previous, to: layout.root)
     }
 
-    static func sha256Hex(of url: URL) throws -> String {
+    static func sha256Hex(of url: URL, checkCancellation: () throws -> Void = {}) throws -> String {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         var hasher = SHA256()
         while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {
+            try checkCancellation()
             hasher.update(data: chunk)
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()

@@ -10,7 +10,7 @@
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-555555?logo=apple&logoColor=white)](#yêu-cầu)
 [![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](https://www.swift.org/)
 [![Offline](https://img.shields.io/badge/xử_lý-100%25_offline-2ea44f)](#quyền-riêng-tư)
-[![Tests](https://img.shields.io/badge/tests-171_passing-6f42c1)](#kiểm-thử)
+[![Tests](https://img.shields.io/badge/tests-174_passing-6f42c1)](#kiểm-thử)
 
 [Tải về](#tải-về) · [Tính năng](#tính-năng) · [Cách hoạt động](#cách-hoạt-động) · [Quyền riêng tư](#quyền-riêng-tư)
 
@@ -32,9 +32,9 @@ Nội dung có DRM thì không. Netflix, Apple TV+ và tương tự bị macOS c
 
 <div align="center">
 
-### [⬇️ Tải SubVoice 0.1.6](https://github.com/hoanganhuynh/subvoice/releases/download/v0.1.6/SubVoice-0.1.6.zip)
+### [⬇️ Tải SubVoice 0.1.7](https://github.com/hoanganhuynh/subvoice/releases/download/v0.1.7/SubVoice-0.1.7.zip)
 
-`SubVoice-0.1.6.zip` · 2,9 MB · macOS 14+ · Apple Silicon
+`SubVoice-0.1.7.zip` · 2,9 MB · macOS 14+ · Apple Silicon
 
 <sub>[Xem tất cả phiên bản](https://github.com/hoanganhuynh/subvoice/releases)</sub>
 
@@ -235,7 +235,7 @@ Logic đáng test nằm ở `SubVoiceCore` và `SubVoiceUI`, đều là value ty
 ## Kiểm thử
 
 ```bash
-swift test                  # 171 test, 16 suite
+swift test                  # 174 test, 16 suite
 ./Scripts/smoke-overlay.sh  # overlay dưới NSZombie
 ./Scripts/smoke-window.sh   # vòng đời cửa sổ
 ```

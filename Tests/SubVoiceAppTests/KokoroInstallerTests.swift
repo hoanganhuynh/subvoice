@@ -67,9 +67,11 @@ struct KokoroInstallerTests {
     /// Chờ tới khi installer rời trạng thái bận.
     private func waitForTerminalState(_ installer: KokoroInstaller) async -> KokoroInstallState {
         if !installer.state.isBusy { return installer.state }
+        let observer = installer.onStateChange
         return await withCheckedContinuation { continuation in
             var resumed = false
             installer.onStateChange = { state in
+                observer?(state)
                 guard !state.isBusy, !resumed else { return }
                 resumed = true
                 continuation.resume(returning: state)
@@ -160,6 +162,66 @@ struct KokoroInstallerTests {
         }
     }
 
+    @Test func extractionRunsOffMainActorAndPublishesProgress() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let archive = try makeArchive(in: directory)
+        let gate = ExtractionGate()
+        defer { gate.release.signal() }
+        let installer = KokoroInstaller(
+            package: KokoroPackage(version: "test", downloadURL: archive,
+                                   sha256: try sha256Hex(of: archive), downloadBytes: 1),
+            applicationSupportDirectory: directory,
+            sessionConfiguration: .ephemeral,
+            extract: { try gate.extract($0, into: $1) }
+        )
+        var phases: [KokoroInstallState] = []
+        installer.onStateChange = { phases.append($0) }
+        installer.start()
+        let started = await Task.detached { gate.waitUntilStarted() }.value
+        #expect(started == .success)
+        // Actor đang chạy trong lúc worker bị giữ ở bước giải nén.
+        for _ in 0..<100 where installer.state != .extracting {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(installer.state == .extracting)
+        #expect(phases.contains(.verifying))
+        #expect(phases.contains(.extracting))
+        gate.release.signal()
+        let final = await waitForTerminalState(installer)
+        #expect(final == .installed(version: "test"))
+        #expect(phases.filter { [.verifying, .extracting, .finishing].contains($0) }
+                == [.verifying, .extracting, .finishing])
+    }
+
+    @Test func cancellingExtractionAndRetryingDoesNotRaceTheNewInstall() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let archive = try makeArchive(in: directory)
+        let gate = ExtractionGate()
+        defer { gate.release.signal() }
+        let installer = KokoroInstaller(
+            package: KokoroPackage(version: "test", downloadURL: archive,
+                                   sha256: try sha256Hex(of: archive), downloadBytes: 1),
+            applicationSupportDirectory: directory,
+            sessionConfiguration: .ephemeral,
+            extract: { try gate.extract($0, into: $1) }
+        )
+        installer.start()
+        let started = await Task.detached { gate.waitUntilStarted() }.value
+        #expect(started == .success)
+        installer.cancel()
+        #expect(installer.state == .notInstalled)
+        installer.start()
+        #expect(installer.state.isBusy)
+        gate.release.signal()
+        let final = await waitForTerminalState(installer)
+        #expect(final == .installed(version: "test"))
+        let layout = KokoroInstallLayout(applicationSupport: directory)
+        #expect(layout.installedVersion() == "test")
+        #expect(!FileManager.default.fileExists(atPath: layout.incoming.path))
+    }
+
     /// Huỷ giữa chừng phải trả installer về trạng thái bấm lại được ngay.
     @Test func cancellationLeavesTheInstallerReadyToRetry() throws {
         let directory = try makeTemporaryDirectory()
@@ -197,4 +259,28 @@ private final class HangingURLProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {}
     override func stopLoading() {}
+}
+
+/// Chặn đúng lượt giải nén đầu tiên để thử MainActor và cancel/retry khi worker còn chạy.
+private final class ExtractionGate: @unchecked Sendable {
+    let started = DispatchSemaphore(value: 0)
+    let release = DispatchSemaphore(value: 0)
+    // Chỉ hàng đợi cài đặt nối tiếp truy cập biến này.
+    private var first = true
+
+    func waitUntilStarted() -> DispatchTimeoutResult {
+        started.wait(timeout: .now() + 5)
+    }
+
+    func extract(_ archive: URL, into destination: URL) throws {
+        #expect(!Thread.isMainThread)
+        if first {
+            first = false
+            started.signal()
+            guard release.wait(timeout: .now() + 5) == .success else {
+                throw CocoaError(.userCancelled)
+            }
+        }
+        try KokoroPackage.extractTar(archive: archive, destination: destination)
+    }
 }

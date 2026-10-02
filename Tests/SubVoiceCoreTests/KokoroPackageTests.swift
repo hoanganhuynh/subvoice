@@ -192,6 +192,31 @@ struct KokoroPackageTests {
         #expect(phases == [.verifying, .extracting, .finishing])
     }
 
+    @Test func cancellationAfterExtractionPreservesExistingRuntimeAndCleansIncoming() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let layout = KokoroInstallLayout(applicationSupport: directory)
+        let old = try makeArchive(in: directory, marker: "old")
+        try package(version: "old", sha256: try sha256(of: old))
+            .install(downloadedArchive: old, into: layout)
+        let new = try makeArchive(in: directory, marker: "new")
+        let update = package(version: "new", sha256: try sha256(of: new))
+        var cancelled = false
+        #expect(throws: CancellationError.self) {
+            try update.install(
+                downloadedArchive: new, into: layout,
+                extract: { archive, destination in
+                    try KokoroPackage.extractTar(archive: archive, destination: destination)
+                    cancelled = true
+                },
+                checkCancellation: { if cancelled { throw CancellationError() } }
+            )
+        }
+        #expect(layout.installedVersion() == "old")
+        #expect(try String(contentsOf: layout.python, encoding: .utf8) == "old")
+        #expect(!FileManager.default.fileExists(atPath: layout.incoming.path))
+    }
+
     // MARK: - Checksum
 
     @Test func wrongChecksumIsRefusedAndLeavesNothingBehind() throws {
