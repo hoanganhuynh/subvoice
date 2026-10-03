@@ -221,12 +221,17 @@ struct KokoroInstallRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: AuroraTheme.spacingXSmall) {
-            Text(state.kokoroInstall.statusText)
+            Text(state.kokoroSupported ? state.kokoroInstall.statusText : "Giọng hệ thống trên Intel")
                 .font(.footnote)
                 .foregroundStyle(isFailed ? theme.warning : theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if state.kokoroInstall.isBusy {
+            if !state.kokoroSupported {
+                Text(KokoroPlatform.unsupportedMessage)
+                    .font(.footnote)
+                    .foregroundStyle(theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if state.kokoroInstall.isBusy {
                 HStack(spacing: AuroraTheme.spacingSmall) {
                     if let progress = state.kokoroInstall.progress {
                         ProgressView(value: progress)
@@ -243,6 +248,8 @@ struct KokoroInstallRow: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Cài Kokoro: \(state.kokoroInstall.statusText)")
+        .accessibilityLabel(state.kokoroSupported
+            ? "Cài Kokoro: \(state.kokoroInstall.statusText)"
+            : KokoroPlatform.unsupportedMessage)
     }
 }

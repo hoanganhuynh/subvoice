@@ -14,11 +14,11 @@ PROJECT_DIR="$(pwd)"
 
 CONFIG="${1:-release}"
 APP_NAME="SubVoice"
-BUILD_DIR=".build/${CONFIG}"
+BUILD_DIR="build/universal/${CONFIG}"
 APP_DIR="build/${APP_NAME}.app"
 INSTALL_DIR="${HOME}/Applications"
 
-swift build -c "${CONFIG}" --product SubVoiceApp
+./Scripts/build-universal.sh "${CONFIG}" "${BUILD_DIR}/SubVoiceApp"
 
 rm -rf "${APP_DIR}"
 mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
@@ -36,7 +36,7 @@ IDENTITY="${SUBVOICE_SIGN_IDENTITY:-}"
 if [ -z "${IDENTITY}" ]; then
     IDENTITY=$(security find-identity -v -p codesigning \
         | grep -oE '"(Developer ID Application|Apple Development)[^"]*"' \
-        | head -1 | tr -d '"')
+        | head -1 | tr -d '"' || true)
 fi
 if [ -z "${IDENTITY}" ]; then
     IDENTITY="-"

@@ -144,12 +144,13 @@ struct OnboardingView: View {
             Text("Giọng Kokoro — tự nhiên hơn, vẫn chạy offline")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(theme.primaryText)
-            Text("Tải thêm khoảng \(downloadSizeText). Bạn dùng SubVoice bình thường "
-                + "trong lúc tải, và bỏ qua bước này thì tải sau trong Voice Studio.")
-                .font(.footnote)
-                .foregroundStyle(theme.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-
+            if state.kokoroSupported {
+                Text("Tải thêm khoảng \(downloadSizeText). Bạn dùng SubVoice bình thường "
+                    + "trong lúc tải, và bỏ qua bước này thì tải sau trong Voice Studio.")
+                    .font(.footnote)
+                    .foregroundStyle(theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             KokoroInstallRow(state: state, viewModel: viewModel)
         }
     }

@@ -1,3 +1,4 @@
+import Darwin
 import Testing
 import Vision
 import CoreGraphics
@@ -79,7 +80,16 @@ private let samples = [
     }
 }
 
-@Test func warmOCRStaysUnder150Milliseconds() {
+private var isRunningUnderRosetta: Bool {
+    var translated: Int32 = 0
+    var size = MemoryLayout<Int32>.size
+    return sysctlbyname("sysctl.proc_translated", &translated, &size, nil, 0) == 0
+        && translated == 1
+}
+
+// Rosetta không đại diện tốc độ OCR trên phần cứng native; các test nội dung vẫn chạy.
+@Test(.disabled(if: isRunningUnderRosetta, "Benchmark OCR chỉ chạy native, không đo qua Rosetta"))
+func warmOCRStaysUnder150Milliseconds() {
     let images = samples.map { renderSubtitle($0, width: 2400, height: 220, fontSize: 68) }
 
     // Hâm nóng: lần OCR đầu tiên tốn ~540ms vì phải nạp model.

@@ -7,10 +7,10 @@
 ### Đọc phụ đề tiếng Việt trên màn hình thành giọng nói, chạy offline trên macOS
 
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white)](https://support.apple.com/macos)
-[![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-555555?logo=apple&logoColor=white)](#yêu-cầu)
+[![Universal](https://img.shields.io/badge/Universal-ARM_%2B_Intel-555555?logo=apple&logoColor=white)](#yêu-cầu)
 [![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](https://www.swift.org/)
 [![Offline](https://img.shields.io/badge/xử_lý-100%25_offline-2ea44f)](#quyền-riêng-tư)
-[![Tests](https://img.shields.io/badge/tests-174_passing-6f42c1)](#kiểm-thử)
+[![Tests](https://img.shields.io/badge/tests-177_passing-6f42c1)](#kiểm-thử)
 
 [Tải về](#tải-về) · [Tính năng](#tính-năng) · [Cách hoạt động](#cách-hoạt-động) · [Quyền riêng tư](#quyền-riêng-tư)
 
@@ -32,9 +32,9 @@ Nội dung có DRM thì không. Netflix, Apple TV+ và tương tự bị macOS c
 
 <div align="center">
 
-### [⬇️ Tải SubVoice 0.1.7](https://github.com/hoanganhuynh/subvoice/releases/download/v0.1.7/SubVoice-0.1.7.zip)
+### [⬇️ Tải SubVoice 0.1.8](https://github.com/hoanganhuynh/subvoice/releases/download/v0.1.8/SubVoice-0.1.8.zip)
 
-`SubVoice-0.1.7.zip` · 2,9 MB · macOS 14+ · Apple Silicon
+`SubVoice-0.1.8.zip` · 3,5 MB · macOS 14+ · Apple Silicon và Intel
 
 <sub>[Xem tất cả phiên bản](https://github.com/hoanganhuynh/subvoice/releases)</sub>
 
@@ -89,7 +89,7 @@ Hướng dẫn chi tiết kèm ảnh: [maclife.io.vn](https://maclife.io.vn/huon
 
 Cửa sổ chính đặt trạng thái và nút bật/tắt ở giữa. Ba thẻ dưới đáy cho biết đang đọc vùng nào, bằng giọng gì, và câu gần nhất vừa đọc là gì. Bấm vào thẻ nào thì mở phần đó ra.
 
-Có hai bộ đọc. Giọng hệ thống của macOS phản hồi trong khoảng 50 ms nên bám kịp phụ đề đang chạy. Kokoro nghe tự nhiên hơn nhiều nhưng chậm hơn, và phải tải thêm 375 MB. Đổi qua lại lúc nào cũng được trong Voice Studio, cùng chỗ để chỉnh tốc độ, âm lượng và nghe thử.
+Trên Apple Silicon có hai bộ đọc. Máy Intel dùng bộ đọc hệ thống macOS. Giọng hệ thống của macOS phản hồi trong khoảng 50 ms nên bám kịp phụ đề đang chạy. Kokoro nghe tự nhiên hơn nhiều nhưng chậm hơn, và phải tải thêm 375 MB. Trên Apple Silicon, đổi qua lại lúc nào cũng được trong Voice Studio, cùng chỗ để chỉnh tốc độ, âm lượng và nghe thử.
 
 Nếu giọng đọc chậm đến mức có 4 câu đang chờ, app bỏ 2 câu chờ cũ nhất để bắt kịp. Câu đang đọc vẫn được đọc hết; các câu còn lại giữ nguyên thứ tự.
 
@@ -183,7 +183,8 @@ SubVoice không cần quyền Microphone, Accessibility hay Input Monitoring.
 ## Yêu cầu
 
 - macOS 14 trở lên
-- Apple Silicon. Giọng Kokoro chỉ có bản arm64; máy Intel vẫn dùng được giọng hệ thống.
+- Apple Silicon hoặc Intel. App Universal chứa cả arm64 và x86_64.
+- Apple Silicon dùng được giọng hệ thống và Kokoro. Intel dùng giọng tiếng Việt của macOS; app không tải gói Kokoro arm64 trên Intel.
 - Quyền Screen Recording
 - Giọng tiếng Việt của macOS nếu dùng bộ đọc hệ thống
 
@@ -197,7 +198,14 @@ open ~/Applications/SubVoice.app
 ```
 
 > [!NOTE]
-> Script cài vào `~/Applications/SubVoice.app`. Giữ đường dẫn và chữ ký ổn định giúp macOS không hỏi lại quyền Screen Recording sau mỗi lần build. Đặt `SUBVOICE_SIGN_IDENTITY` để dùng chứng chỉ của bạn.
+> Script build cả arm64 và x86_64, ghép thành app Universal rồi cài vào `~/Applications/SubVoice.app`. Giữ đường dẫn và chữ ký ổn định giúp macOS không hỏi lại quyền Screen Recording sau mỗi lần build. Đặt `SUBVOICE_SIGN_IDENTITY` để dùng chứng chỉ của bạn.
+
+Để chỉ tạo executable Universal, không cài app:
+
+```bash
+./Scripts/build-universal.sh release
+lipo -archs build/universal/SubVoiceApp  # arm64 x86_64
+```
 
 ### Đóng gói lại Kokoro
 
@@ -235,10 +243,12 @@ Logic đáng test nằm ở `SubVoiceCore` và `SubVoiceUI`, đều là value ty
 ## Kiểm thử
 
 ```bash
-swift test                  # 174 test, 16 suite
+swift test                  # 177 test, 17 suite
 ./Scripts/smoke-overlay.sh  # overlay dưới NSZombie
 ./Scripts/smoke-window.sh   # vòng đời cửa sổ
 ```
+
+Bản Universal được kiểm tra ở cả arm64 và x86_64 qua Rosetta trên Apple Silicon. Benchmark độ trễ OCR chỉ chạy native. Chưa kiểm thử trực tiếp trên máy Intel thật, nên hiệu năng OCR trên Intel còn cần xác nhận.
 
 Bật trace khi cần tìm câu bị bỏ qua:
 

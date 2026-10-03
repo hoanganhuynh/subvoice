@@ -72,6 +72,7 @@ public struct AppViewState: Equatable, Sendable {
     public var screenRecordingGranted = false
     public var systemVoiceStatus: DiagnosticStatus = .unavailable("Chưa kiểm tra")
     public var kokoroStatus: DiagnosticStatus = .unavailable("Chưa kiểm tra")
+    public var kokoroSupported = KokoroPlatform.isSupported
     public var kokoroAvailable = false
     public var kokoroInstall: KokoroInstallState = .notInstalled
     public var launchAtLoginEnabled = false

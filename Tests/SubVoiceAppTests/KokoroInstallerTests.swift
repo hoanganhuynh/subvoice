@@ -92,9 +92,19 @@ struct KokoroInstallerTests {
                 sha256: sha256,
                 downloadBytes: 1
             ),
+            supportsKokoro: true,
             applicationSupportDirectory: applicationSupport,
             sessionConfiguration: .ephemeral
         )
+    }
+
+    @Test func unsupportedPlatformCannotDownloadTheArmRuntime() {
+        let installer = KokoroInstaller(supportsKokoro: false)
+        installer.start()
+        #expect(installer.state == .failed(message: KokoroPlatform.unsupportedMessage))
+        #expect(!installer.state.isBusy)
+        installer.refreshInstalledState()
+        #expect(installer.state == .notInstalled)
     }
 
     @Test func installsALocalArchiveEndToEnd() async throws {
@@ -171,6 +181,7 @@ struct KokoroInstallerTests {
         let installer = KokoroInstaller(
             package: KokoroPackage(version: "test", downloadURL: archive,
                                    sha256: try sha256Hex(of: archive), downloadBytes: 1),
+            supportsKokoro: true,
             applicationSupportDirectory: directory,
             sessionConfiguration: .ephemeral,
             extract: { try gate.extract($0, into: $1) }
@@ -203,6 +214,7 @@ struct KokoroInstallerTests {
         let installer = KokoroInstaller(
             package: KokoroPackage(version: "test", downloadURL: archive,
                                    sha256: try sha256Hex(of: archive), downloadBytes: 1),
+            supportsKokoro: true,
             applicationSupportDirectory: directory,
             sessionConfiguration: .ephemeral,
             extract: { try gate.extract($0, into: $1) }
@@ -237,6 +249,7 @@ struct KokoroInstallerTests {
                 sha256: String(repeating: "0", count: 64),
                 downloadBytes: 1
             ),
+            supportsKokoro: true,
             applicationSupportDirectory: directory,
             sessionConfiguration: configuration
         )

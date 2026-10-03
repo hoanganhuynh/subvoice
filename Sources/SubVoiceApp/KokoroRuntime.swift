@@ -12,6 +12,7 @@ struct KokoroRuntime {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         fileManager: FileManager = .default
     ) throws -> KokoroRuntime {
+        guard KokoroPlatform.isSupported else { throw KokoroRuntimeError.unsupportedPlatform }
         var roots: [URL] = []
         if let configured = environment["KOKORO_ROOT"], !configured.isEmpty {
             roots.append(URL(fileURLWithPath: configured, isDirectory: true))
@@ -55,9 +56,12 @@ struct KokoroRuntime {
 
 enum KokoroRuntimeError: LocalizedError {
     case notInstalled
+    case unsupportedPlatform
 
     var errorDescription: String? {
         switch self {
+        case .unsupportedPlatform:
+            return KokoroPlatform.unsupportedMessage
         case .notInstalled:
             return "Chưa cài bộ giọng Kokoro"
         }

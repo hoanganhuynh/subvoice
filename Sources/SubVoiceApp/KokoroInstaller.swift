@@ -9,6 +9,7 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
 
     var onStateChange: ((KokoroInstallState) -> Void)?
 
+    private let supportsKokoro: Bool
     private let package: KokoroPackage
     private let layout: KokoroInstallLayout
     private let resumeDataURL: URL
@@ -34,6 +35,7 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
 
     init(
         package: KokoroPackage = .current,
+        supportsKokoro: Bool = KokoroPlatform.isSupported,
         fileManager: FileManager = .default,
         applicationSupportDirectory: URL? = nil,
         sessionConfiguration: URLSessionConfiguration = .default,
@@ -41,6 +43,7 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
             try KokoroPackage.extractTar(archive: $0, destination: $1)
         }
     ) {
+        self.supportsKokoro = supportsKokoro
         self.extract = extract
         self.package = package
         self.sessionConfiguration = sessionConfiguration
@@ -73,6 +76,7 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
     /// Khác `refreshInstalledState()`, hàm này còn được dùng ngay sau hủy.
     /// Lúc đó state vẫn đang bận nên không được đi qua guard của hàm public.
     private func setInstalledState() {
+        guard supportsKokoro else { state = .notInstalled; return }
         if let version = layout.installedVersion(), version == package.version {
             state = .installed(version: version)
         } else {
@@ -82,6 +86,10 @@ final class KokoroInstaller: NSObject, URLSessionDownloadDelegate {
 
     func start() {
         guard !state.isBusy else { return }
+        guard supportsKokoro else {
+            state = .failed(message: KokoroPlatform.unsupportedMessage)
+            return
+        }
 
         do {
             try FileManager.default.createDirectory(
