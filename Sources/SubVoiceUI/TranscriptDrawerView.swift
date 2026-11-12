@@ -109,10 +109,19 @@ struct TranscriptDrawerView: View {
                 Text(TranscriptDrawerView.timeFormatter.string(from: entry.timestamp))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(theme.secondaryText)
-                Text(entry.text)
-                    .foregroundStyle(theme.primaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    if let source = entry.sourceText {
+                        Text(source)
+                            .font(.caption)
+                            .foregroundStyle(theme.secondaryText)
+                            .accessibilityLabel("Tiếng Anh: \(source)")
+                    }
+                    Text(entry.text)
+                        .foregroundStyle(theme.primaryText)
+                        .accessibilityLabel(entry.sourceText == nil ? entry.text : "Tiếng Việt: \(entry.text)")
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Button(action: onCopy) {
                     Image(systemName: "doc.on.doc")
                 }

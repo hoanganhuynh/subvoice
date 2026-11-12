@@ -76,6 +76,7 @@ public struct AppViewState: Equatable, Sendable {
     public var kokoroAvailable = false
     public var kokoroInstall: KokoroInstallState = .notInstalled
     public var launchAtLoginEnabled = false
+    public var translationStatus: SubtitleTranslationStatus = .checking
 
     public init() {}
 
@@ -103,6 +104,9 @@ public enum AppIntent: Equatable, Sendable {
     case toggleCapture
     case selectRegion
     case changeEngine(SpeechEngine)
+    case changeReadingMode(ReadingMode)
+    case prepareTranslation
+    case cancelTranslationPreparation
     case changeVoice(String)
     case changeRate(Float)
     case changeVolume(Float)

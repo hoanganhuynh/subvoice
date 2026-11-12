@@ -11,13 +11,17 @@ public struct SubVoiceRootView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @State private var route: SheetRoute?
+    @State private var prepareAfterDismiss = false
     @FocusState private var dashboardFocused: Bool
 
     private let appVersion: String
+    private let translation: TranslationBridge?
 
-    public init(viewModel: AppViewModel, appVersion: String = SubVoiceRootView.bundleVersion) {
+    public init(viewModel: AppViewModel, appVersion: String = SubVoiceRootView.bundleVersion,
+                translation: TranslationBridge? = nil) {
         self.viewModel = viewModel
         self.appVersion = appVersion
+        self.translation = translation
     }
 
     public static var bundleVersion: String {
@@ -42,7 +46,12 @@ public struct SubVoiceRootView: View {
             }
         }
         .environment(\.aurora, theme)
-        .sheet(item: $route) { route in
+        .background {
+            if #available(macOS 15, *), let translation {
+                AppleTranslationHost(bridge: translation)
+            }
+        }
+        .sheet(item: $route, onDismiss: didDismissSheet) { route in
             sheet(for: route)
                 .environment(\.aurora, theme)
         }
@@ -67,7 +76,11 @@ public struct SubVoiceRootView: View {
             VoiceStudioView(
                 state: viewModel.state,
                 viewModel: viewModel,
-                onClose: dismissSheet
+                onClose: dismissSheet,
+                onPrepareTranslation: {
+                    prepareAfterDismiss = true
+                    self.route = nil
+                }
             )
         case .transcript:
             TranscriptDrawerView(
@@ -87,8 +100,13 @@ public struct SubVoiceRootView: View {
 
     private func dismissSheet() {
         route = nil
-        DispatchQueue.main.async {
-            dashboardFocused = true
+    }
+
+    private func didDismissSheet() {
+        dashboardFocused = true
+        if prepareAfterDismiss {
+            prepareAfterDismiss = false
+            viewModel.send(.prepareTranslation)
         }
     }
 }

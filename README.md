@@ -91,6 +91,16 @@ Cửa sổ chính đặt trạng thái và nút bật/tắt ở giữa. Ba thẻ
 
 Trên Apple Silicon có hai bộ đọc. Máy Intel dùng bộ đọc hệ thống macOS. Giọng hệ thống của macOS phản hồi trong khoảng 50 ms nên bám kịp phụ đề đang chạy. Kokoro nghe tự nhiên hơn nhiều nhưng chậm hơn, và phải tải thêm 375 MB. Trên Apple Silicon, đổi qua lại lúc nào cũng được trong Voice Studio, cùng chỗ để chỉnh tốc độ, âm lượng và nghe thử.
 
+### Dịch phụ đề Anh rồi đọc tiếng Việt
+
+Tính năng có trong bản build từ mã nguồn mới nhất; gói tải về 0.1.8 ở trên chưa bao gồm chế độ dịch.
+
+Mở **Voice Studio → Nội dung đọc → Dịch Anh → Việt**. Bấm **Chuẩn bị dịch offline**, xác nhận tải ngôn ngữ trong hộp thoại macOS, rồi chọn vùng phụ đề tiếng Anh và bấm **Bắt đầu đọc**. SubVoice nhận chữ tiếng Anh, dịch cả câu sang tiếng Việt và đọc bằng giọng bạn đang chọn. Menu bar cũng có mục **Nội dung đọc** để đổi chế độ.
+
+Tính năng dùng Apple Translation trên **macOS 15 trở lên**, kiểm tra cặp ngôn ngữ Anh–Việt trên máy trước khi dùng. Cần mạng để tải gói ngôn ngữ lần đầu; sau đó dịch trên thiết bị, không cần API key. macOS 14 vẫn dùng được chế độ **Đọc tiếng Việt**.
+
+Lịch sử phiên hiện cả câu tiếng Anh và bản dịch; tìm kiếm được cả hai, nút sao chép lấy bản tiếng Việt. Đổi chế độ sẽ dừng phiên hiện tại. Nếu dịch thất bại, app báo lỗi và dừng, tránh đọc câu tiếng Anh bằng giọng Việt. Dịch thêm độ trễ so với đọc trực tiếp; phụ đề được giữ ổn định ngắn trước khi gửi dịch để hạn chế đọc lặp lúc chữ hiện dần. Tính năng này dịch chữ trong vùng màn hình, không nhận dạng lời thoại từ âm thanh.
+
 Nếu giọng đọc chậm đến mức có 4 câu đang chờ, app bỏ 2 câu chờ cũ nhất để bắt kịp. Câu đang đọc vẫn được đọc hết; các câu còn lại giữ nguyên thứ tự.
 
 Phụ đề đứng yên thì app im lặng chứ không đọc đi đọc lại. Phụ đề hiện dần kiểu fade-in hay cảnh đổi nhanh vẫn xử lý được.
@@ -129,13 +139,16 @@ Biểu tượng đổi theo trạng thái: gạch chéo khi tắt, sóng âm khi
    ChangeDetector            chỉ chạy tiếp khi chữ đổi
             │
             ▼
-   Vision OCR                nhận diện tiếng Việt có dấu
+   Vision OCR                tiếng Việt hoặc tiếng Anh
             │
             ▼
-   TextGate                  chuẩn hoá, lọc trùng
+   TextGate / bộ đệm câu     chuẩn hoá, lọc trùng
             │
             ▼
-   SpeechQueue               FIFO, không bỏ câu
+   Apple Translation         dịch Anh → Việt khi bật chế độ dịch
+            │
+            ▼
+   SpeechQueue               giữ thứ tự, bắt kịp khi giọng đọc bị trễ
             │
             ▼
    Giọng hệ thống / Kokoro ──▶ loa
@@ -175,6 +188,7 @@ Toàn bộ pipeline chạy trên máy bạn. Không có API phân tích, không 
 
 - ScreenCaptureKit chỉ lấy đúng vùng bạn khoanh, không lấy cả màn hình.
 - Vision nhận diện chữ cục bộ.
+- Apple Translation dịch trên thiết bị sau khi tải ngôn ngữ; không gửi nội dung phụ đề lên máy chủ. macOS có thể thu số liệu sử dụng bộ dịch và cặp ngôn ngữ, không bao gồm câu gốc hay bản dịch.
 - Linh và Kokoro đều tổng hợp giọng offline.
 - Lịch sử phiên chỉ nằm trong bộ nhớ tiến trình, tối đa 200 câu, biến mất khi thoát app. Nó không được ghi vào `UserDefaults` hay bất kỳ file log nào.
 

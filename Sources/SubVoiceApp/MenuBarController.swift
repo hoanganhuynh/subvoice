@@ -24,6 +24,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private var rateItems: [NSMenuItem] = []
     private var volumeItems: [NSMenuItem] = []
     private let launchAtLoginItem = NSMenuItem()
+    private var readingModeItems: [NSMenuItem] = []
 
     /// Danh sách giọng đang hiện, để chỉ dựng lại submenu khi nó thực sự đổi.
     private var renderedVoices: [SpeechVoiceOption] = []
@@ -39,6 +40,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         renderRunState(state.runState)
         renderNotice(state.notice, runState: state.runState)
         renderVoices(state.voices, selectedIdentifier: state.selectedVoiceIdentifier)
+        for item in readingModeItems {
+            guard let raw = item.representedObject as? String, let mode = ReadingMode(rawValue: raw) else { continue }
+            item.state = mode == state.settings.readingMode ? .on : .off
+            item.isEnabled = mode == .vietnamese || TranslationBridge.platformSupported
+        }
 
         for item in engineItems {
             guard let raw = item.representedObject as? String,
@@ -194,6 +200,17 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         let engineMenu = NSMenu()
+        let modeMenu = NSMenu()
+        for mode in ReadingMode.allCases {
+            let item = NSMenuItem(title: mode.title, action: #selector(readingModeClicked(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = mode.rawValue
+            modeMenu.addItem(item)
+            readingModeItems.append(item)
+        }
+        let modeRoot = NSMenuItem(title: "Nội dung đọc", action: nil, keyEquivalent: "")
+        modeRoot.submenu = modeMenu
+        menu.addItem(modeRoot)
         let engines: [(SpeechEngine, String)] = [
             (.system, "Hệ thống — nhanh"),
             (.kokoro, "Kokoro — tự nhiên, offline"),
@@ -286,6 +303,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
               let engine = SpeechEngine(rawValue: raw)
         else { return }
         onIntent?(.changeEngine(engine))
+    }
+
+    @objc private func readingModeClicked(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let mode = ReadingMode(rawValue: raw) else { return }
+        onIntent?(.changeReadingMode(mode))
     }
 
     @objc private func voiceClicked(_ sender: NSMenuItem) {

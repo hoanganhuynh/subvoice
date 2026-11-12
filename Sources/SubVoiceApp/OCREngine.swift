@@ -12,10 +12,17 @@ final class OCREngine {
 
     private let queue = DispatchQueue(label: "com.williens.subvoice.ocr", qos: .userInteractive)
     private let lock = NSLock()
-    private let recognizeFrame: (CVPixelBuffer) -> String
+    private let recognizeFrame: ((CVPixelBuffer) -> String)?
+    private var readingMode: ReadingMode = .vietnamese
 
-    init(recognize: @escaping (CVPixelBuffer) -> String = OCREngine.recognize) {
+    init(recognize: ((CVPixelBuffer) -> String)? = nil) {
         recognizeFrame = recognize
+    }
+
+    func setReadingMode(_ mode: ReadingMode) {
+        lock.lock()
+        readingMode = mode
+        lock.unlock()
     }
 
     private var busy = false
@@ -28,7 +35,7 @@ final class OCREngine {
             var buffer: CVPixelBuffer?
             CVPixelBufferCreate(nil, 32, 32, kCVPixelFormatType_32BGRA, nil, &buffer)
             guard let buffer else { return }
-            _ = Self.recognize(buffer)
+            _ = Self.recognize(buffer, languages: ["vi-VT"])
         }
     }
 
@@ -54,7 +61,10 @@ final class OCREngine {
     private func process(_ frame: CVPixelBuffer, session: UUID) {
         var current: (CVPixelBuffer, UUID)? = (frame, session)
         while let (buffer, session) = current {
-            onText?(recognizeFrame(buffer), session)
+            lock.lock()
+            let languages = readingMode.recognitionLanguages
+            lock.unlock()
+            onText?(recognizeFrame?(buffer) ?? Self.recognize(buffer, languages: languages), session)
 
             lock.lock()
             current = pendingFrame
@@ -64,10 +74,10 @@ final class OCREngine {
         }
     }
 
-    private static func recognize(_ buffer: CVPixelBuffer) -> String {
+    private static func recognize(_ buffer: CVPixelBuffer, languages: [String]) -> String {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate       // .fast KHÔNG có tiếng Việt
-        request.recognitionLanguages = ["vi-VT"]   // đúng là "vi-VT", không phải "vi-VN"
+        request.recognitionLanguages = languages
         request.usesLanguageCorrection = true
         request.minimumTextHeight = 0.05
 

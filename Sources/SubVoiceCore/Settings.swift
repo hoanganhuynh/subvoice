@@ -22,6 +22,7 @@ public struct Settings: Codable, Equatable, Sendable {
     private var storedHasCompletedOnboarding = false
     private var storedPauseWhenWindowInactive = true
     private var storedPauseOnWindowTitleChange = true
+    private var storedReadingMode: ReadingMode = .vietnamese
 
     public init() {}
 
@@ -35,11 +36,13 @@ public struct Settings: Codable, Equatable, Sendable {
         case storedHasCompletedOnboarding
         case storedPauseWhenWindowInactive
         case storedPauseOnWindowTitleChange
+        case storedReadingMode
     }
 
     public init(from decoder: Decoder) throws {
         self.init()
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        readingMode = (try? values.decode(ReadingMode.self, forKey: .storedReadingMode)) ?? .vietnamese
         speechRate = try values.decodeIfPresent(Float.self, forKey: .storedRate) ?? 0.55
         volume = try values.decodeIfPresent(Float.self, forKey: .storedVolume) ?? 1.0
         speechVoiceIdentifier = try values.decodeIfPresent(
@@ -79,6 +82,7 @@ public struct Settings: Codable, Equatable, Sendable {
 
     public func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(storedReadingMode, forKey: .storedReadingMode)
         try values.encode(storedRate, forKey: .storedRate)
         try values.encode(storedVolume, forKey: .storedVolume)
         try values.encodeIfPresent(storedVoiceIdentifier, forKey: .storedVoiceIdentifier)
@@ -93,6 +97,11 @@ public struct Settings: Codable, Equatable, Sendable {
     public var speechRate: Float {
         get { storedRate }
         set { storedRate = min(max(newValue, Settings.minimumRate), Settings.maximumRate) }
+    }
+
+    public var readingMode: ReadingMode {
+        get { storedReadingMode }
+        set { storedReadingMode = newValue }
     }
 
     public var volume: Float {

@@ -100,6 +100,12 @@ final class AppCoordinator {
     let viewModel = AppViewModel(state: AppViewState())
     private var mainWindow: MainWindowController!
     private let kokoroInstaller = KokoroInstaller()
+    private let translationBridge = TranslationBridge()
+    private var translationPreparation: Task<Void, Never>?
+    private lazy var translationPipeline = SubtitleTranslationPipeline { [weak self] text in
+        guard let self else { throw CancellationError() }
+        return try await self.translationBridge.translate(text)
+    }
 
     // Chạm từ hàng đợi bắt màn hình, nên không thể mang isolation của MainActor.
     // OCREngine tự khoá bên trong; CaptureQueueState chỉ có đúng một luồng dùng.
@@ -130,6 +136,7 @@ final class AppCoordinator {
     }
     private var isRunning = false
     private var captureSession: UUID?
+    private var ocrDeliverySession = OCRDeliverySession()
     private var captureStartTask: Task<Void, Never>?
 
     private var isPreviewing: Bool {
@@ -200,7 +207,7 @@ final class AppCoordinator {
         }
         Store.saveSettings(settings)
         menuBar = MenuBarController()
-        mainWindow = MainWindowController(viewModel: viewModel)
+        mainWindow = MainWindowController(viewModel: viewModel, translation: translationBridge)
         mainWindow.apply(theme: settings.themeMode)
         viewModel.onIntent = { [weak self] intent in self?.handle(intent) }
         wireMenuBar()
@@ -215,6 +222,7 @@ final class AppCoordinator {
         }
 
         ocr.warmUp()
+        ocr.setReadingMode(settings.readingMode)
         speech.warmUp()
 
         if CommandLine.arguments.contains("--smoke-overlay") {
@@ -307,6 +315,7 @@ final class AppCoordinator {
             state.launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
             state.kokoroInstall = kokoroInstaller.state
             state.notice = activeNotice
+            state.translationStatus = translationBridge.status
         }
         menuBar?.render(viewModel.state)
     }
@@ -321,6 +330,12 @@ final class AppCoordinator {
             reselectRegion()
         case .changeEngine(let engine):
             switchSpeechEngine(to: engine)
+        case .changeReadingMode(let mode):
+            changeReadingMode(to: mode)
+        case .prepareTranslation:
+            prepareTranslation(startAfterPreparation: false)
+        case .cancelTranslationPreparation:
+            cancelTranslationPreparation()
         case .changeVoice(let identifier):
             changeVoice(to: identifier)
         case .changeRate(let rate):
@@ -387,6 +402,47 @@ final class AppCoordinator {
         }
         Store.saveSettings(settings)
         publishSnapshot()
+    }
+
+    private func changeReadingMode(to mode: ReadingMode) {
+        guard mode != settings.readingMode else { return }
+        stop()
+        settings.readingMode = mode
+        ocr.setReadingMode(mode)
+        Store.saveSettings(settings)
+        refreshIdleState()
+    }
+
+    private func cancelTranslationPreparation() {
+        translationPreparation?.cancel()
+        translationPreparation = nil
+        translationBridge.cancel()
+        publishSnapshot()
+    }
+
+    private func prepareTranslation(startAfterPreparation: Bool) {
+        guard translationPreparation == nil else { return }
+        showMainWindow()
+        activeNotice = nil
+        translationPreparation = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.translationBridge.prepare()
+                guard !Task.isCancelled else { return }
+                self.translationPreparation = nil
+                self.publishSnapshot()
+                if startAfterPreparation, self.settings.readingMode == .englishToVietnamese {
+                    self.startCapturing()
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.translationPreparation = nil
+                self.activeNotice = AppWarning(
+                    message: self.translationBridge.status.message, recovery: .retry
+                )
+                self.publishSnapshot()
+            }
+        }
     }
 
     /// Preview và capture không bao giờ cùng tồn tại. Đánh dấu activity trước
@@ -474,6 +530,21 @@ final class AppCoordinator {
     }
 
     private func wirePipeline() {
+        translationBridge.onStatusChange = { [weak self] _ in self?.publishSnapshot() }
+        translationPipeline.onResult = { [weak self] source, target in
+            guard let self, self.isRunning,
+                  self.settings.readingMode == .englishToVietnamese else { return }
+            self.windowWatcher.refreshNow()
+            guard !self.windowPaused() else { return }
+            self.enqueueSpeech(target, sourceText: source)
+        }
+        translationPipeline.onError = { [weak self] error in
+            guard let self else { return }
+            self.stop()
+            self.publishSnapshot(runState: .warning(AppWarning(
+                message: "Không dịch được Anh → Việt: \(error.localizedDescription)", recovery: .retry
+            )))
+        }
         capturer.onFrame = { [weak self] frame in self?.handleFrame(frame) }
         capturer.onFatalError = { [weak self] message in
             guard let self else { return }
@@ -484,7 +555,7 @@ final class AppCoordinator {
         }
         ocr.onText = { [weak self] text, session in
             Task { @MainActor in
-                guard self?.captureSession == session else { return }
+                guard self?.ocrDeliverySession.accepts(session) == true else { return }
                 self?.handleText(text)
             }
         }
@@ -570,6 +641,10 @@ final class AppCoordinator {
     // MARK: - Máy trạng thái
 
     private func toggle() {
+        if translationPreparation != nil {
+            cancelTranslationPreparation()
+            return
+        }
         switch CaptureTogglePolicy.action(
             isCaptureRunning: isRunning,
             isPreviewing: isPreviewing
@@ -586,6 +661,10 @@ final class AppCoordinator {
 
     private func startCapturing() {
         guard !isSelectingRegion else { return }
+        if settings.readingMode == .englishToVietnamese, !translationBridge.status.isReady {
+            prepareTranslation(startAfterPreparation: true)
+            return
+        }
         guard PermissionHelper.hasScreenRecordingAccess else {
             PermissionHelper.requestScreenRecordingAccess()
             publishSnapshot(runState: .warning(AppWarning(
@@ -601,11 +680,13 @@ final class AppCoordinator {
 
         let session = UUID()
         captureSession = session
+        let deliverySession = ocrDeliverySession.begin()
         captureQueue.sync {
             captureState.reset()
-            captureState.session = session
+            captureState.session = deliverySession
         }
         gate.clear()
+        translationPipeline.reset()
         speechQueue.reset()
         cancelPreviewIfNeeded()
         activeNotice = nil
@@ -630,7 +711,10 @@ final class AppCoordinator {
     }
 
     private func stop() {
+        cancelTranslationPreparation()
+        translationPipeline.reset()
         captureSession = nil
+        ocrDeliverySession.invalidate()
         captureStartTask?.cancel()
         captureStartTask = nil
         isRunning = false
@@ -684,12 +768,27 @@ final class AppCoordinator {
         switch verdict {
         case .paused(let reason):
             setWindowPaused(true)
+            ocrDeliverySession.invalidate()
+            captureQueue.sync {
+                captureState.reset()
+                captureState.session = nil
+            }
+            ocr.reset()
+            translationPipeline.reset()
+            translationBridge.cancel()
             // Câu đang phát dở vẫn đọc hết, nhưng cả hàng đợi phía sau thì bỏ:
             // chúng được bắt ngay trước lúc khuất nên không chắc còn là phụ đề,
             // và người dùng cũng vừa nhìn đi chỗ khác.
             speechQueue.dropPending()
             publishSnapshot(runState: .paused(reason))
         case .active:
+            if windowPaused() {
+                let session = ocrDeliverySession.begin()
+                captureQueue.sync {
+                    captureState.reset()
+                    captureState.session = session
+                }
+            }
             setWindowPaused(false)
             publishSnapshot(runState: isSpeakingCapturedText ? .speaking : .listening)
         }
@@ -799,8 +898,11 @@ final class AppCoordinator {
             // Vùng phụ đề trống -> xoá trạng thái lọc trùng, để câu lặp lại
             // ở cảnh sau vẫn được đọc.
             Task { @MainActor [weak self] in
-                guard let self, self.captureSession == session else { return }
+                guard let self, let session, self.ocrDeliverySession.accepts(session) else { return }
                 self.gate.clear()
+                if self.settings.readingMode == .englishToVietnamese, !self.windowPaused() {
+                    self.translationPipeline.endSubtitle()
+                }
             }
 
         case .unchanged:
@@ -832,6 +934,15 @@ final class AppCoordinator {
 
         if tracing { TraceLog.shared.write("ocr       \"\(text)\"") }
 
+        if settings.readingMode == .englishToVietnamese {
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                translationPipeline.endSubtitle()
+            } else {
+                translationPipeline.submit(text)
+            }
+            return
+        }
+
         let verdict = gate.admit(text)
         guard case .speak(let sentence) = verdict else {
             if tracing {
@@ -841,7 +952,11 @@ final class AppCoordinator {
         }
         if tracing { TraceLog.shared.write("  gate=DOC  \"\(sentence)\"") }
 
-        viewModel.apply { $0.transcript.append(text: sentence) }
+        enqueueSpeech(sentence)
+    }
+
+    private func enqueueSpeech(_ sentence: String, sourceText: String? = nil) {
+        viewModel.apply { $0.transcript.append(text: sentence, sourceText: sourceText) }
         menuBar.render(viewModel.state)
 
         let immediate = speechQueue.enqueue(sentence)

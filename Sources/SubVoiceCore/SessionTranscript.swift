@@ -12,11 +12,13 @@ public struct TranscriptEntry: Identifiable, Equatable, Sendable {
     public let id: UUID
     public let timestamp: Date
     public let text: String
+    public let sourceText: String?
 
-    public init(id: UUID = UUID(), timestamp: Date, text: String) {
+    public init(id: UUID = UUID(), timestamp: Date, text: String, sourceText: String? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.text = text
+        self.sourceText = sourceText
     }
 }
 
@@ -31,8 +33,8 @@ public struct SessionTranscript: Equatable, Sendable {
 
     public init() {}
 
-    public mutating func append(text: String, at timestamp: Date = .now) {
-        entries.insert(TranscriptEntry(timestamp: timestamp, text: text), at: 0)
+    public mutating func append(text: String, sourceText: String? = nil, at timestamp: Date = .now) {
+        entries.insert(TranscriptEntry(timestamp: timestamp, text: text, sourceText: sourceText), at: 0)
         if entries.count > Self.maximumEntries {
             entries.removeLast(entries.count - Self.maximumEntries)
         }
@@ -47,6 +49,9 @@ public struct SessionTranscript: Equatable, Sendable {
     public func matching(_ query: String) -> [TranscriptEntry] {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return entries }
-        return entries.filter { $0.text.localizedCaseInsensitiveContains(value) }
+        return entries.filter {
+            $0.text.localizedCaseInsensitiveContains(value)
+                || ($0.sourceText?.localizedCaseInsensitiveContains(value) ?? false)
+        }
     }
 }

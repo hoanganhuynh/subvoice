@@ -44,7 +44,8 @@ struct ControlDockView: View {
     private var voiceDetail: String {
         let engine = state.settings.speechEngine == .kokoro ? "Kokoro" : "Hệ thống"
         guard let name = state.selectedVoiceName else { return "\(engine) · chưa có giọng" }
-        return "\(engine) · \(name)"
+        let mode = state.settings.readingMode == .englishToVietnamese ? "Anh → Việt · " : ""
+        return "\(mode)\(engine) · \(name)"
     }
 
     private var latestDetail: String {

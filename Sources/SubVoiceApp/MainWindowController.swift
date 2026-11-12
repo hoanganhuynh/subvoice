@@ -14,8 +14,8 @@ final class MainWindowController: NSObject, NSWindowDelegate {
 
     var isVisible: Bool { window.isVisible }
 
-    init(viewModel: AppViewModel) {
-        let root = SubVoiceRootView(viewModel: viewModel)
+    init(viewModel: AppViewModel, translation: TranslationBridge? = nil) {
+        let root = SubVoiceRootView(viewModel: viewModel, translation: translation)
         let host = NSHostingController(rootView: root)
         // Mặc định NSHostingController ép cửa sổ co giãn theo kích thước lý
         // tưởng của SwiftUI, làm cửa sổ mở ra cao gấp ba lần thiết kế. Cửa sổ

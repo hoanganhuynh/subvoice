@@ -7,6 +7,7 @@ struct VoiceStudioView: View {
     let state: AppViewState
     let viewModel: AppViewModel
     let onClose: () -> Void
+    let onPrepareTranslation: () -> Void
 
     @Environment(\.aurora) private var theme
 
@@ -30,7 +31,40 @@ struct VoiceStudioView: View {
 
     var body: some View {
         SheetScaffold(title: "Voice Studio", onClose: onClose) {
+            ScrollView {
             VStack(alignment: .leading, spacing: AuroraTheme.spacingMedium) {
+                VStack(alignment: .leading, spacing: AuroraTheme.spacingXSmall) {
+                    Picker("Nội dung đọc", selection: Binding(
+                        get: { state.settings.readingMode },
+                        set: { viewModel.send(.changeReadingMode($0)) }
+                    )) {
+                        Text("Đọc tiếng Việt").tag(ReadingMode.vietnamese)
+                        Text("Dịch Anh → Việt").tag(ReadingMode.englishToVietnamese)
+                            .disabled(!TranslationBridge.platformSupported)
+                    }
+                    .accessibilityHint("Đổi chế độ sẽ dừng phiên đang đọc.")
+
+                    if state.settings.readingMode == .englishToVietnamese {
+                        Text(state.translationStatus.message)
+                            .font(.footnote)
+                            .foregroundStyle(theme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if state.translationStatus.canPrepare {
+                            Button("Chuẩn bị dịch offline", action: onPrepareTranslation)
+                                .frame(minHeight: 44)
+                        } else if state.translationStatus == .preparing {
+                            HStack {
+                                ProgressView().controlSize(.small)
+                                Button("Huỷ chuẩn bị dịch") { viewModel.send(.cancelTranslationPreparation) }
+                                    .frame(minHeight: 44)
+                            }
+                        }
+                        Text("Nhận phụ đề tiếng Anh, dịch rồi đọc bằng giọng tiếng Việt bên dưới.")
+                            .font(.footnote)
+                            .foregroundStyle(theme.secondaryText)
+                    }
+                }
+
                 VStack(alignment: .leading, spacing: AuroraTheme.spacingXSmall) {
                     Text("Bộ đọc").font(.subheadline.weight(.semibold))
                         .foregroundStyle(theme.primaryText)
@@ -86,6 +120,7 @@ struct VoiceStudioView: View {
                 Text("Thay đổi có hiệu lực từ câu kế tiếp.")
                     .font(.footnote)
                     .foregroundStyle(theme.secondaryText)
+            }
             }
         }
     }
