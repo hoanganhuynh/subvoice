@@ -1,10 +1,81 @@
 import Foundation
 import Testing
+import SubVoiceUI
 @testable import SubVoiceApp
 
 @MainActor
 @Suite("Subtitle translation pipeline", .timeLimit(.minutes(1)))
 struct SubtitleTranslationPipelineTests {
+    @Test func waitingIndicatorClearsWhenACompleteSentenceIsQueuedOrReset() {
+        let pipeline = SubtitleTranslationPipeline(translate: { _ in "bản dịch" })
+        var waiting: [Bool] = []
+        pipeline.onWaitingChange = { waiting.append($0) }
+        pipeline.submit("I was going to")
+        #expect(waiting == [true])
+        pipeline.submit("tell you something.")
+        pipeline.endSubtitle()
+        #expect(waiting == [true, false])
+        pipeline.submit("Another incomplete")
+        pipeline.reset()
+        #expect(waiting == [true, false, true, false])
+    }
+
+    @Test func incompleteTextIsHeldPastBothTimersAndJoinedAcrossBlankFrames() async throws {
+        var requests: [String] = []
+        let (results, emit) = AsyncStream<String>.makeStream()
+        let pipeline = SubtitleTranslationPipeline(
+            translate: { text in requests.append(text); return "Tôi định nói với bạn một chuyện." },
+            stabilizationDelay: .milliseconds(5), unpunctuatedDelay: .milliseconds(15)
+        )
+        pipeline.onResult = { source, _ in emit.yield(source) }
+        pipeline.submit("I was going to")
+        try await Task.sleep(for: .milliseconds(45))
+        #expect(requests.isEmpty)
+        pipeline.endSubtitle()
+        try await Task.sleep(for: .milliseconds(25))
+        #expect(requests.isEmpty)
+        pipeline.submit("tell you something.")
+        var output = results.makeAsyncIterator()
+        #expect(await output.next() == "I was going to tell you something.")
+        #expect(requests == ["I was going to tell you something."])
+        pipeline.reset()
+    }
+
+    @Test func unpunctuatedCompleteTextDoesNotWaitForeverForAnotherFrame() async {
+        let (results, emit) = AsyncStream<String>.makeStream()
+        let pipeline = SubtitleTranslationPipeline(
+            translate: { _ in "Tôi không biết" },
+            stabilizationDelay: .milliseconds(5), unpunctuatedDelay: .milliseconds(15)
+        )
+        pipeline.onResult = { source, _ in emit.yield(source) }
+        pipeline.submit("I don't know")
+        var output = results.makeAsyncIterator()
+        #expect(await output.next() == "I don't know")
+        pipeline.reset()
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["SUBVOICE_CHECK_TRANSLATION"] == "1"))
+    func assembledSentenceReachesTheRealAppleTranslatorAsOneRequest() async throws {
+        let bridge = TranslationBridge()
+        await bridge.refreshAvailability()
+        try #require(bridge.status.isReady)
+        let (results, emit) = AsyncStream<(String, String)>.makeStream()
+        let pipeline = SubtitleTranslationPipeline(translate: bridge.translate)
+        pipeline.onResult = { emit.yield(($0, $1)) }
+        pipeline.onError = { error in Issue.record(error); emit.finish() }
+        pipeline.submit("I was going to")
+        pipeline.endSubtitle()
+        pipeline.submit("tell you something.")
+        pipeline.endSubtitle()
+        var iterator = results.makeAsyncIterator()
+        let result = try #require(await iterator.next())
+        #expect(result.0 == "I was going to tell you something.")
+        #expect(!result.1.isEmpty)
+        #expect(result.1 != result.0)
+        print("Assembled Apple translation: \(result.0) → \(result.1)")
+        pipeline.reset()
+    }
+
     private final class Translator {
         let requests: AsyncStream<(String, CheckedContinuation<String, Error>)>
         let continuation: AsyncStream<(String, CheckedContinuation<String, Error>)>.Continuation

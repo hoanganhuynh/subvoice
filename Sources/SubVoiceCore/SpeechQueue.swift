@@ -1,6 +1,7 @@
 /// Hàng đợi câu chờ đọc.
 ///
-/// Khi có bốn câu chờ, bỏ hai câu cũ nhất để bám lại phụ đề.
+/// Mặc định khi có bốn câu chờ, bỏ hai câu cũ nhất để bám lại phụ đề.
+/// Chế độ dịch dùng `preservingPending` để không mất các câu vừa ghép đủ ý.
 /// Câu đang phát luôn được đọc hết; các câu còn lại giữ nguyên thứ tự.
 public struct SpeechQueue {
     private var pending: [String] = []
@@ -12,13 +13,13 @@ public struct SpeechQueue {
     public var isSpeaking: Bool { speaking }
 
     /// - Returns: câu cần đưa xuống backend NGAY, hoặc nil nếu phải xếp hàng chờ.
-    public mutating func enqueue(_ text: String) -> String? {
+    public mutating func enqueue(_ text: String, preservingPending: Bool = false) -> String? {
         guard speaking else {
             speaking = true
             return text
         }
         pending.append(text)
-        if pending.count >= 4 { pending.removeFirst(2) }
+        if !preservingPending, pending.count >= 4 { pending.removeFirst(2) }
         return nil
     }
 

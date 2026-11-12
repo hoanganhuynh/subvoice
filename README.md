@@ -99,9 +99,11 @@ Mở **Voice Studio → Nội dung đọc → Dịch Anh → Việt**. Bấm **C
 
 Tính năng dùng Apple Translation trên **macOS 15 trở lên**, kiểm tra cặp ngôn ngữ Anh–Việt trên máy trước khi dùng. Cần mạng để tải gói ngôn ngữ lần đầu; sau đó dịch trên thiết bị, không cần API key. macOS 14 vẫn dùng được chế độ **Đọc tiếng Việt**.
 
-Lịch sử phiên hiện cả câu tiếng Anh và bản dịch; tìm kiếm được cả hai, nút sao chép lấy bản tiếng Việt. Đổi chế độ sẽ dừng phiên hiện tại. Nếu dịch thất bại, app báo lỗi và dừng, tránh đọc câu tiếng Anh bằng giọng Việt. Dịch thêm độ trễ so với đọc trực tiếp; phụ đề được giữ ổn định ngắn trước khi gửi dịch để hạn chế đọc lặp lúc chữ hiện dần. Tính năng này dịch chữ trong vùng màn hình, không nhận dạng lời thoại từ âm thanh.
+Lịch sử phiên hiện cả câu tiếng Anh và bản dịch; tìm kiếm được cả hai, nút sao chép lấy bản tiếng Việt. Đổi chế độ sẽ dừng phiên hiện tại. Nếu dịch thất bại, app báo lỗi và dừng, tránh đọc câu tiếng Anh bằng giọng Việt. Tính năng này dịch chữ trong vùng màn hình, không nhận dạng lời thoại từ âm thanh.
 
-Nếu giọng đọc chậm đến mức có 4 câu đang chờ, app bỏ 2 câu chờ cũ nhất để bắt kịp. Câu đang đọc vẫn được đọc hết; các câu còn lại giữ nguyên thứ tự.
+Bộ ghép giữ câu còn dở qua nhiều cue và khoảng trống, chẳng hạn `I was going to` + `tell you something.` chỉ được dịch sau khi ghép đủ. Dấu phẩy, dấu ba chấm, chữ viết tắt và số thập phân không bị coi nhầm là hết câu. Khi cần chờ phần tiếp theo, dashboard hiện **Đang ghép câu tiếng Anh…**. Với câu không có dấu câu, app chờ ổn định lâu hơn rồi xét các dấu hiệu cụm từ/mệnh đề còn thiếu; đây là quy tắc suy đoán, không phải bộ hiểu ngữ pháp hoàn hảo. Vì chờ đủ ý, chế độ dịch có thể trễ hơn đọc trực tiếp.
+
+Ở chế độ đọc tiếng Việt trực tiếp, nếu giọng đọc chậm đến mức có 4 câu đang chờ, app bỏ 2 câu chờ cũ nhất để bắt kịp. Chế độ **Dịch Anh → Việt** giữ toàn bộ câu đã dịch theo thứ tự, không tự bỏ câu khi loa đọc chậm hơn video; có thể phát trễ hơn trong đoạn thoại nhanh. Chủ động dừng, đổi vùng hoặc tạm dừng vì cửa sổ nguồn bị che vẫn huỷ phần đang chờ.
 
 Phụ đề đứng yên thì app im lặng chứ không đọc đi đọc lại. Phụ đề hiện dần kiểu fade-in hay cảnh đổi nhanh vẫn xử lý được.
 

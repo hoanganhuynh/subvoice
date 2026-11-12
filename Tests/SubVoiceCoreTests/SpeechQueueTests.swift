@@ -1,6 +1,19 @@
 import Testing
 @testable import SubVoiceCore
 
+@Test func translatedSentencesAreAllRetainedWhenSpeechFallsBehind() {
+    var queue = SpeechQueue()
+    #expect(queue.enqueue("câu 1", preservingPending: true) == "câu 1")
+    for text in ["câu 2", "câu 3", "câu 4", "câu 5", "câu 6", "câu 7"] {
+        _ = queue.enqueue(text, preservingPending: true)
+    }
+    #expect(queue.pendingCount == 6)
+    for text in ["câu 2", "câu 3", "câu 4", "câu 5", "câu 6", "câu 7"] {
+        #expect(queue.finished() == text)
+    }
+    #expect(queue.finished() == nil)
+}
+
 @Test func firstEnqueueStartsSpeakingImmediately() {
     var queue = SpeechQueue()
     #expect(queue.enqueue("câu một") == "câu một")

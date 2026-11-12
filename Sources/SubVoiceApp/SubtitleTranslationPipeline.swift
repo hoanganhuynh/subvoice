@@ -7,30 +7,46 @@ import SubVoiceCore
 final class SubtitleTranslationPipeline {
     var onResult: ((String, String) -> Void)?
     var onError: ((Error) -> Void)?
+    var onWaitingChange: ((Bool) -> Void)?
 
     private let translate: (String) async throws -> String
+    private let stabilizationDelay: Duration
+    private let unpunctuatedDelay: Duration
     private var buffer = SubtitleTextBuffer()
     private var pending: [String] = []
     private var generation = UUID()
     private var worker: Task<Void, Never>?
     private var settle: Task<Void, Never>?
     private var lastInput: String?
+    private var wasWaiting = false
 
-    init(translate: @escaping (String) async throws -> String) {
+    init(translate: @escaping (String) async throws -> String,
+         stabilizationDelay: Duration = .milliseconds(350),
+         unpunctuatedDelay: Duration = .milliseconds(1800)) {
         self.translate = translate
+        self.stabilizationDelay = max(.zero, stabilizationDelay)
+        self.unpunctuatedDelay = max(self.stabilizationDelay, unpunctuatedDelay)
     }
 
     func submit(_ text: String) {
         guard let normalized = TextGate.normalize(text), normalized != lastInput else { return }
         lastInput = normalized
         for ready in buffer.submit(normalized) { enqueue(ready) }
+        publishWaiting()
         settle?.cancel()
         let current = generation
         settle = Task { [weak self] in
-            do { try await Task.sleep(for: .milliseconds(500)) }
+            guard let self else { return }
+            do { try await Task.sleep(for: self.stabilizationDelay) }
             catch { return }
-            guard let self, self.generation == current else { return }
-            if let ready = self.buffer.flush() { self.enqueue(ready) }
+            guard self.generation == current else { return }
+            self.flushReady(allowUnpunctuated: false)
+            do { try await Task.sleep(for: self.unpunctuatedDelay - self.stabilizationDelay) }
+            catch { return }
+            guard self.generation == current else { return }
+            // Chờ lâu hơn cho nguồn không có dấu câu. Cụm còn thiếu bổ ngữ
+            // hoặc mệnh đề phụ vẫn ở lại buffer, không bị timeout ép đi dịch.
+            self.flushReady(allowUnpunctuated: true)
         }
     }
 
@@ -39,6 +55,19 @@ final class SubtitleTranslationPipeline {
         settle = nil
         lastInput = nil
         if let ready = buffer.endSubtitle() { enqueue(ready) }
+        flushReady(allowUnpunctuated: true)
+    }
+
+    private func flushReady(allowUnpunctuated: Bool) {
+        while let ready = buffer.flush(allowUnpunctuated: allowUnpunctuated) { enqueue(ready) }
+        publishWaiting()
+    }
+
+    private func publishWaiting() {
+        let waiting = buffer.hasPendingText
+        guard waiting != wasWaiting else { return }
+        wasWaiting = waiting
+        onWaitingChange?(waiting)
     }
 
     func reset() {
@@ -50,6 +79,7 @@ final class SubtitleTranslationPipeline {
         pending.removeAll()
         lastInput = nil
         buffer.reset()
+        publishWaiting()
     }
 
     private func enqueue(_ text: String) {

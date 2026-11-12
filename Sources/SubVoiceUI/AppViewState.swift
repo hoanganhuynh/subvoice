@@ -77,6 +77,7 @@ public struct AppViewState: Equatable, Sendable {
     public var kokoroInstall: KokoroInstallState = .notInstalled
     public var launchAtLoginEnabled = false
     public var translationStatus: SubtitleTranslationStatus = .checking
+    public var isWaitingForEnglishSentence = false
 
     public init() {}
 

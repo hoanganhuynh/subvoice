@@ -531,6 +531,9 @@ final class AppCoordinator {
 
     private func wirePipeline() {
         translationBridge.onStatusChange = { [weak self] _ in self?.publishSnapshot() }
+        translationPipeline.onWaitingChange = { [weak self] waiting in
+            self?.viewModel.apply { $0.isWaitingForEnglishSentence = waiting }
+        }
         translationPipeline.onResult = { [weak self] source, target in
             guard let self, self.isRunning,
                   self.settings.readingMode == .englishToVietnamese else { return }
@@ -959,7 +962,7 @@ final class AppCoordinator {
         viewModel.apply { $0.transcript.append(text: sentence, sourceText: sourceText) }
         menuBar.render(viewModel.state)
 
-        let immediate = speechQueue.enqueue(sentence)
+        let immediate = speechQueue.enqueue(sentence, preservingPending: sourceText != nil)
         if tracing {
             TraceLog.shared.write(
                 "  queue=\(immediate == nil ? "xep-hang" : "doc-ngay")"

@@ -20,6 +20,11 @@ struct FocusDashboardView: View {
         VStack(spacing: AuroraTheme.spacingMedium) {
             StatusOrbView(runState: state.runState, size: orbSize)
             HeroCopyView(content: content)
+            if state.settings.readingMode == .englishToVietnamese, state.isWaitingForEnglishSentence {
+                Text("Đang ghép câu tiếng Anh…")
+                    .font(.footnote)
+                    .foregroundStyle(theme.secondaryText)
+            }
             PrimaryCaptureButton(
                 title: content.primaryActionTitle,
                 isCapturing: state.isCapturing
